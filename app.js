@@ -883,7 +883,7 @@ function renderBudgetBreakdown() {
     const barW = (catSpent / ccSpent * 100).toFixed(1);
     const barColor = overCat ? '#dc2626' : categoryColor(cat);
     const pctLabel = (catSpent / ccSpent * 100).toFixed(0) + '%';
-    return `<div class="budget-cat-row" onclick="jumpToBudgetCategory('${esc(cat)}')" title="View ${esc(cat)} transactions">
+    return `<div class="budget-cat-row" onclick="jumpToBudgetCategory('${escAttr(cat)}')" title="View ${esc(cat)} transactions">
       <div class="budget-cat-row-label">
         <span class="budget-cat-dot" style="background:${categoryColor(cat)}"></span>
         <span class="budget-cat-row-name">${esc(cat)}</span>
@@ -1409,7 +1409,7 @@ function renderTransactions() {
         <tr>
           <td>${fmtDate(t.date)}</td>
           <td>
-            <div><span class="merchant-link" onclick="goToMerchant('${esc(t.merchant)}')">${esc(t.merchant)}</span></div>
+            <div><span class="merchant-link" onclick="goToMerchant('${escAttr(t.merchant)}')">${esc(t.merchant)}</span></div>
             ${t.notes ? `<div class="txn-note">${esc(t.notes)}</div>` : ''}
             ${t.card ? `<div class="txn-card-badge">${esc(t.card)}</div>` : ''}
           </td>
@@ -1771,6 +1771,7 @@ async function saveEditModal() {
     state.txVersion++;
     closeEditModal();
     renderTransactions();
+    clearDashboardCaches();
     renderDashboard();
     showToast('Transaction added', 'success');
     return;
@@ -1779,8 +1780,9 @@ async function saveEditModal() {
   if (!txnId) return;
   await api('PUT', `/api/transactions/${txnId}`, { merchant, date, amount, category, notes });
   const txn = state.transactions.find(t => t.id === txnId);
-  if (txn) Object.assign(txn, { merchant, date, amount, category, notes });
+  if (txn) { Object.assign(txn, { merchant, date, amount, category, notes }); state.txVersion++; }
   closeEditModal();
+  clearDashboardCaches();
   renderTransactions();
   showToast('Transaction updated', 'success');
 }
@@ -1792,6 +1794,7 @@ async function deleteTransaction() {
   await api('DELETE', `/api/transactions/${txnId}`);
   state.transactions = state.transactions.filter(t => t.id !== txnId);
   state.txVersion++;
+  clearDashboardCaches();
   closeEditModal();
   renderTransactions();
   showToast('Transaction deleted', 'success');
@@ -1802,6 +1805,7 @@ async function deleteTransactionById(id) {
   await api('DELETE', `/api/transactions/${id}`);
   state.transactions = state.transactions.filter(t => t.id !== id);
   state.txVersion++;
+  clearDashboardCaches();
   renderTransactions();
   if (state.currentView === 'dashboard') renderDashboard();
   showToast('Transaction deleted', 'success');
@@ -1844,7 +1848,7 @@ function renderTopMerchants(txns) {
     return;
   }
   el.innerHTML = top.map(([merchant, amt]) => `
-    <div class="top-merchant-row" onclick="jumpToMerchant('${esc(merchant)}')" title="View ${esc(merchant)} transactions">
+    <div class="top-merchant-row" onclick="jumpToMerchant('${escAttr(merchant)}')" title="View ${esc(merchant)} transactions">
       <div class="top-merchant-name">${esc(merchant)}</div>
       <div class="top-merchant-amt">${fmt(amt)}</div>
     </div>
@@ -2169,8 +2173,8 @@ async function renderSources() {
           <input type="text" class="source-card-input" id="src-card-${i}" value="${esc(sourceCards[s])}" placeholder="Card (optional)" list="card-suggestions" />
         </div>
         <div class="source-actions">
-          <button class="btn btn-sm btn-primary" onclick="saveSource('${esc(s)}', ${i})">Save</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteSource('${esc(s)}')">Remove</button>
+          <button class="btn btn-sm btn-primary" onclick="saveSource('${escAttr(s)}', ${i})">Save</button>
+          <button class="btn btn-sm btn-danger" onclick="deleteSource('${escAttr(s)}')">Remove</button>
         </div>
       </div>
     </li>
@@ -2444,7 +2448,7 @@ function renderMerchants() {
   empty.style.display = 'none';
   table.style.display = '';
 
-  tbody.innerHTML = filtered.map(([merchant, category]) => {
+  tbody.innerHTML = filtered.map(([merchant, category], idx) => {
     const color = categoryColor(category);
     const count = txnCounts[merchant] || 0;
     return `
@@ -2459,12 +2463,12 @@ function renderMerchants() {
         <td>${count}</td>
         <td>
           <div style="display:flex;gap:.4rem;align-items:center">
-            <button class="btn btn-sm btn-secondary" onclick="showMerchantChart('${esc(merchant)}')" title="View spend history">📈</button>
-            <select id="medit-${btoa(merchant).replace(/=/g,'')}" class="merchant-edit-select" style="display:inline-block">
+            <button class="btn btn-sm btn-secondary" onclick="showMerchantChart('${escAttr(merchant)}')" title="View spend history">📈</button>
+            <select id="medit-${idx}" class="merchant-edit-select" style="display:inline-block">
               ${CATEGORIES.map(c => `<option value="${esc(c)}" ${c === category ? 'selected' : ''}>${esc(c)}</option>`).join('')}
             </select>
-            <button class="btn btn-sm btn-secondary" onclick="saveMerchantEdit('${esc(merchant)}', '${btoa(merchant).replace(/=/g,'')}')">Save</button>
-            <button class="btn btn-sm btn-danger" onclick="deleteMerchant('${esc(merchant)}')">Delete</button>
+            <button class="btn btn-sm btn-secondary" onclick="saveMerchantEdit('${escAttr(merchant)}', ${idx})">Save</button>
+            <button class="btn btn-sm btn-danger" onclick="deleteMerchant('${escAttr(merchant)}')">Delete</button>
           </div>
         </td>
       </tr>`;
@@ -2575,6 +2579,7 @@ async function saveMerchantEdit(merchant, key) {
   await api('POST', '/api/merchants', { merchant, category: cat });
   state.merchants = await api('GET', '/api/merchants');
   state.transactions = await api('GET', '/api/transactions');
+  state.txVersion++;
   renderMerchants();
   showToast('Merchant updated', 'success');
 }
