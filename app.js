@@ -32,6 +32,7 @@ const state = {
   expandedMerchants: new Set(),
   jumpToCategory: null,
   jumpToMonth: null,
+  navHistory: [],
   merchantFilter: null,
   editingTxnId: null,
   pendingMerchants: [],
@@ -119,12 +120,19 @@ async function loadAll() {
 }
 
 // ---- Navigation ----
-function switchView(view) {
+function switchView(view, { skipHistory = false, clearHistory = false } = {}) {
+  if (clearHistory) {
+    state.navHistory = [];
+  } else if (!skipHistory && state.currentView && state.currentView !== view) {
+    state.navHistory.push(state.currentView);
+  }
   state.currentView = view;
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
   document.getElementById(`view-${view}`).classList.add('active');
   document.querySelector(`[data-view="${view}"]`).classList.add('active');
+  const backBtn = document.getElementById('back-btn');
+  if (backBtn) backBtn.style.display = state.navHistory.length ? '' : 'none';
 
   if (view === 'dashboard') renderDashboard();
   if (view === 'transactions') renderTransactions();
@@ -134,10 +142,16 @@ function switchView(view) {
   if (view === 'settings') renderSettings();
 }
 
+function goBack() {
+  if (!state.navHistory.length) return;
+  const prev = state.navHistory.pop();
+  switchView(prev, { skipHistory: true });
+}
+
 document.querySelectorAll('.nav-link').forEach(link => {
   link.addEventListener('click', e => {
     e.preventDefault();
-    switchView(link.dataset.view);
+    switchView(link.dataset.view, { clearHistory: true });
   });
 });
 
@@ -866,7 +880,7 @@ function renderBudgetBreakdown() {
     const barW = (catSpent / ccSpent * 100).toFixed(1);
     const barColor = overCat ? '#dc2626' : categoryColor(cat);
     const pctLabel = (catSpent / ccSpent * 100).toFixed(0) + '%';
-    return `<div class="budget-cat-row">
+    return `<div class="budget-cat-row" onclick="jumpToBudgetCategory('${esc(cat)}')" title="View ${esc(cat)} transactions">
       <div class="budget-cat-row-label">
         <span class="budget-cat-dot" style="background:${categoryColor(cat)}"></span>
         <span class="budget-cat-row-name">${esc(cat)}</span>
@@ -1835,6 +1849,13 @@ function jumpToMerchant(merchant) {
   clearFilterInputs();
   state.merchantFilter = merchant;
   state.jumpToMonth = state.dashboardMonth;
+  switchView('transactions');
+}
+
+function jumpToBudgetCategory(cat) {
+  clearFilterInputs();
+  state.jumpToCategory = cat;
+  state.jumpToMonth = state.budgetMonth;
   switchView('transactions');
 }
 

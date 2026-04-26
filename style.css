@@ -50,6 +50,24 @@ body {
 
 .brand-logo-full { width: 200px; object-fit: contain; }
 
+.back-btn {
+  display: flex;
+  align-items: center;
+  gap: .35rem;
+  width: calc(100% - 1.2rem);
+  margin: .5rem .6rem .1rem;
+  padding: .4rem .7rem;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: .8rem;
+  cursor: pointer;
+  border-radius: 7px;
+  text-align: left;
+  transition: background .15s, color .15s;
+}
+.back-btn:hover { background: #4f6580; color: #f1f5f9; }
+
 .sidebar-nav {
   display: flex;
   flex-direction: column;
@@ -1522,9 +1540,14 @@ select:focus {
   display: flex;
   align-items: center;
   gap: .75rem;
-  padding: .55rem 0;
+  padding: .55rem .4rem;
   border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  border-radius: 6px;
+  margin: 0 -.4rem;
+  transition: background .12s;
 }
+.budget-cat-row:hover { background: var(--surface-2); }
 .budget-cat-row:last-child { border-bottom: none; }
 .budget-cat-row-label {
   display: flex;
