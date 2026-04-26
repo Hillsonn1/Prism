@@ -148,7 +148,7 @@ body {
 
 .dash-right-stack { height: 100%; }
 .dash-grow { flex: 1; min-height: 0; }
-#recurring-card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+#recurring-card { display: flex; flex-direction: column; }
 
 .muted { color: var(--muted); }
 
@@ -542,7 +542,11 @@ body {
 
 .row-actions { display: flex; gap: .1rem; align-items: center; }
 
-#recurring-list { flex: 1; min-height: 0; overflow-y: auto; padding-right: 8px; }
+#recurring-list { max-height: 210px; overflow-y: auto; padding-right: 4px; }
+#recurring-list::-webkit-scrollbar { width: 4px; }
+#recurring-list::-webkit-scrollbar-track { background: transparent; }
+#recurring-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+#recurring-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* ---- Empty state ---- */
 .empty-state {
