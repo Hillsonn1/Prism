@@ -2161,10 +2161,15 @@ async function saveSource(oldName, idx) {
 
 async function deleteSource(source) {
   if (!confirm(`Remove all transactions from "${source}"?`)) return;
-  await api('DELETE', `/api/transactions?source=${encodeURIComponent(source)}`);
-  await loadAll();
-  renderSources();
-  showToast('File removed', 'success');
+  try {
+    await api('DELETE', `/api/transactions?source=${encodeURIComponent(source)}`);
+    await loadAll();
+    await renderSources();
+    renderDashboard();
+    showToast('File removed', 'success');
+  } catch (e) {
+    showToast('Failed to remove statement', 'error');
+  }
 }
 
 // ---- Category Modal ----
