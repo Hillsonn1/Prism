@@ -3,7 +3,7 @@ name: Build Mac DMG
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   build-mac:
