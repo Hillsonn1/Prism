@@ -1,0 +1,32 @@
+name: Build Mac DMG
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Bundle frontend
+        run: node bundle-public.js
+
+      - name: Build Mac DMG
+        run: npm run build:mac
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: Prism-Mac
+          path: dist/*.dmg
+          retention-days: 30

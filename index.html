@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prism</title>
+  <link rel="icon" type="image/x-icon" href="/icon.ico" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <img src="/prism-logo.png" class="brand-logo-full" alt="Prism" />
+      </div>
+      <nav class="sidebar-nav">
+        <a class="nav-link active" data-view="dashboard" href="#">
+          <span class="nav-icon">📊</span> Dashboard
+        </a>
+        <a class="nav-link" data-view="transactions" href="#">
+          <span class="nav-icon">📋</span> Transactions
+        </a>
+        <a class="nav-link" data-view="upload" href="#">
+          <span class="nav-icon">📂</span> Statements
+        </a>
+        <a class="nav-link" data-view="merchants" href="#">
+          <span class="nav-icon">🏪</span> Merchants
+        </a>
+        <a class="nav-link" data-view="budget" href="#">
+          <span class="nav-icon">💰</span> Budget
+        </a>
+        <a class="nav-link" data-view="settings" href="#">
+          <span class="nav-icon">⚙️</span> Settings
+        </a>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div id="view-dashboard" class="view active">
+        <div class="page-header">
+          <h1>Dashboard</h1>
+        </div>
+        <div id="dashboard-content">
+          <div class="empty-state" id="dashboard-empty">
+            <img src="/prism-logo.png" alt="Prism" style="width:180px;margin-bottom:1.25rem;opacity:.85" />
+            <h2>No transactions yet</h2>
+            <p>Upload a credit card statement to get started.</p>
+            <button class="btn btn-primary" onclick="switchView('upload')">Upload Statement</button>
+            <p style="font-size:.8rem;color:var(--muted);margin-top:1rem;max-width:340px;line-height:1.65">
+              Some features are labeled <span class="ai-badge" style="font-size:.68rem">AI</span> — those need an Anthropic API key to work. Add one in
+              <a href="#" onclick="switchView('settings');return false" style="color:var(--primary);font-weight:500">Settings</a> to unlock them.
+            </p>
+          </div>
+          <div id="dashboard-data" style="display:none">
+            <div id="dashboard-filter-bar" style="margin-bottom:1rem"></div>
+            <div class="summary-cards" id="summary-cards"></div>
+            <div id="uncategorized-banner" class="uncategorized-banner" style="display:none"></div>
+            <div id="anomalies-card" class="anomalies-strip" style="display:none">
+              <div id="anomalies-list"></div>
+            </div>
+            <div class="card">
+              <div class="card-title-row">
+                <h2 class="card-title" style="margin-bottom:0">Monthly Spending</h2>
+                <button id="trend-toggle" class="btn-link" onclick="toggleTrendView()">Show all</button>
+              </div>
+              <div id="trend-chart" class="trend-chart-wrap"></div>
+            </div>
+            <div class="dashboard-grid">
+              <div class="card" style="display:flex;flex-direction:column">
+                <h2 class="card-title">Spending by Category</h2>
+                <div id="pie-chart"></div>
+                <div id="category-chart"></div>
+                <div id="insights-card" style="display:none;margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
+                  <div class="insights-header">
+                    <span class="insights-title"><span class="ai-badge">AI</span> Insights</span>
+                    <button id="insights-refresh-btn" class="btn-link insights-refresh" onclick="refreshInsights()" style="display:none">↺ Refresh</button>
+                  </div>
+                  <div id="insights-generate-state">
+                    <button id="insights-generate-btn" class="insights-generate-btn" onclick="generateInsights()">✦ Generate insights</button>
+                  </div>
+                  <div id="insights-content" class="insights-content" style="display:none"></div>
+                </div>
+              </div>
+              <div class="dash-right-stack">
+                <div class="card">
+                  <h2 class="card-title">Top Merchants</h2>
+                  <div id="top-merchants"></div>
+                </div>
+                <div class="card dash-grow">
+                  <h2 class="card-title">Recent Transactions</h2>
+                  <div id="recent-transactions"></div>
+                </div>
+                <div class="card" id="recurring-card" style="display:none">
+                  <h2 class="card-title">Recurring Transactions</h2>
+                  <div id="recurring-list"></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <div id="view-transactions" class="view">
+        <div class="page-header">
+          <h1>Transactions</h1>
+          <div class="header-actions">
+            <span id="txn-count" class="count-badge"></span>
+            <span id="txn-total" class="txn-total"></span>
+            <button class="btn btn-primary btn-sm" onclick="openAddModal()">+ Add</button>
+            <button id="group-toggle" class="btn btn-secondary btn-sm" onclick="toggleGroup()">Group by vendor</button>
+            <button class="btn btn-secondary btn-sm" onclick="exportCSV()">Export CSV</button>
+          </div>
+        </div>
+        <div class="filters card">
+          <div class="filter-row">
+            <div class="filter-group">
+              <label>Category</label>
+              <select id="filter-category">
+                <option value="">All Categories</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Search</label>
+              <input type="text" id="filter-merchant" placeholder="Search merchant or note…" />
+            </div>
+            <div class="filter-group">
+              <label>Card</label>
+              <select id="filter-card">
+                <option value="">All cards</option>
+              </select>
+            </div>
+            <div class="filter-group">
+              <label>Date</label>
+              <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+                <select id="filter-month" onchange="onMonthFilterSelect()">
+                  <option value="">Any time</option>
+                </select>
+                <input type="date" id="filter-date-from" oninput="onDateRangeChange()" />
+                <span style="color:var(--muted);font-size:.8rem">–</span>
+                <input type="date" id="filter-date-to" oninput="onDateRangeChange()" />
+              </div>
+            </div>
+            <button class="btn btn-secondary" onclick="clearFilters()">Clear</button>
+          </div>
+        </div>
+        <div class="card table-card">
+          <div id="transactions-empty" class="empty-state" style="display:none">
+            <div class="empty-icon">🔍</div>
+            <p>No transactions match your filters.</p>
+          </div>
+          <table id="transactions-table" class="data-table">
+            <thead>
+              <tr>
+                <th class="sortable" data-col="date">Date <span class="sort-arrow"></span></th>
+                <th class="sortable" data-col="merchant">Merchant <span class="sort-arrow"></span></th>
+                <th class="sortable" data-col="amount">Amount <span class="sort-arrow"></span></th>
+                <th class="sortable" data-col="category">Category <span class="sort-arrow"></span></th>
+                <th style="width:90px"></th>
+              </tr>
+            </thead>
+            <tbody id="transactions-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="view-upload" class="view">
+        <div class="page-header">
+          <h1>Statements</h1>
+        </div>
+        <div class="card upload-card">
+          <div class="upload-zone" id="upload-zone">
+            <div class="upload-icon">📄</div>
+            <h2>Drop your statement here</h2>
+            <p>CSV or PDF files from your bank or credit card</p>
+            <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
+              Choose File
+            </button>
+            <input type="file" id="file-input" accept=".csv,.pdf" style="display:none" />
+          </div>
+          <div id="pending-upload-panel" style="display:none">
+            <div class="pending-upload-file" id="pending-upload-filename"></div>
+            <div class="upload-meta-row">
+              <div class="upload-meta-field">
+                <label class="settings-label">Statement name <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+                <input type="text" id="statement-name-input" placeholder="e.g. Chase March 2025" style="width:100%" />
+              </div>
+              <div class="upload-meta-field">
+                <label class="settings-label">Card nickname <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+                <input type="text" id="card-name-input" placeholder="e.g. Amex Platinum, Chase Sapphire…" style="width:100%" list="card-suggestions" />
+                <datalist id="card-suggestions"></datalist>
+              </div>
+            </div>
+            <div class="pending-upload-actions">
+              <button class="btn btn-secondary" onclick="cancelPendingUpload()">Cancel</button>
+              <button class="btn btn-primary" onclick="startUpload()">Upload</button>
+            </div>
+          </div>
+          <div id="upload-result" style="display:none"></div>
+        </div>
+        <div class="card" id="sources-card" style="margin-top:1.5rem;display:none">
+          <h2 class="card-title">Imported Statements</h2>
+          <p class="muted" style="margin-bottom:1rem">Remove a statement to delete all transactions that came from it.</p>
+          <ul id="sources-list" style="list-style:none;padding:0;margin:0"></ul>
+        </div>
+        <div class="card" style="margin-top:1.5rem">
+          <h2 class="card-title">Supported Formats</h2>
+          <ul class="format-list format-list-grid">
+            <li><strong>Chase</strong> — Transaction Date, Description, Category, Amount</li>
+            <li><strong>American Express</strong> — Date, Description, Amount</li>
+            <li><strong>Capital One</strong> — Transaction Date, Description, Debit/Credit</li>
+            <li><strong>Citi</strong> — Date, Description, Debit/Credit</li>
+            <li><strong>Bank of America</strong> — Posted Date, Payee, Amount</li>
+            <li><strong>Any CSV</strong> with Date, Description/Merchant, and Amount columns</li>
+            <li><strong>PDF statements</strong> — works best when transactions are on individual lines</li>
+          </ul>
+        </div>
+      </div>
+
+      <div id="view-settings" class="view">
+        <div class="page-header">
+          <h1>Settings</h1>
+        </div>
+        <div class="card">
+          <div class="card-title-row">
+            <h2 class="card-title" style="margin-bottom:0">AI Features <span class="ai-badge">AI</span></h2>
+            <div id="settings-key-status"></div>
+          </div>
+          <p class="muted" style="margin:1rem 0 1.25rem">
+            Prism works great on its own. Add an Anthropic API key to unlock:
+            auto-categorization on import, smart merchant identification, and spending insights.
+          </p>
+          <div class="settings-form">
+            <label class="settings-label">Anthropic API Key <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+            <div class="settings-input-row">
+              <input type="password" id="settings-api-key" placeholder="sk-ant-api03-…"
+                style="flex:1;font-family:monospace" autocomplete="off" />
+              <button class="btn btn-primary" onclick="saveSettings()">Save Key</button>
+            </div>
+            <p class="settings-hint">
+              Get your key at <strong>console.anthropic.com</strong> → API Keys.
+              Stored only on your computer, never shared.
+            </p>
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Cards</h2>
+          <p class="muted" style="margin-bottom:1.25rem">
+            Rename cards imported from your statements. Changes apply to all matching transactions.
+          </p>
+          <div id="cards-list"></div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Location</h2>
+          <p class="muted" style="margin-bottom:1.25rem">
+            Tell the app where you spend most. This localizes AI web searches so it can identify
+            local businesses — especially useful outside the US. Format: City, Country
+            (e.g. <em>Jerusalem, Israel</em> or <em>New York, US</em>).
+          </p>
+          <div id="location-status" style="margin-bottom:1rem"></div>
+          <div class="settings-form">
+            <label class="settings-label">Your Location</label>
+            <div class="settings-input-row">
+              <input type="text" id="settings-location" placeholder="e.g. Jerusalem, Israel" style="flex:1" />
+              <button class="btn btn-primary" onclick="saveLocation()">Save</button>
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Clean Up Existing Transactions</h2>
+          <div class="cleanup-actions">
+            <div class="cleanup-action">
+              <div>
+                <div class="cleanup-action-title">Remove Payments</div>
+                <div class="muted cleanup-action-desc">Deletes bill payments, autopay, and bank transfers that slipped through on import.</div>
+              </div>
+              <button class="btn btn-secondary" id="payments-btn" onclick="removePayments()">Remove Payments</button>
+            </div>
+            <div class="cleanup-action">
+              <div>
+                <div class="cleanup-action-title">Normalize Names</div>
+                <div class="muted cleanup-action-desc">Strips transaction codes, store numbers, and payment processor prefixes from merchant names.</div>
+              </div>
+              <button class="btn btn-secondary" id="normalize-btn" onclick="normalizeNames()">Normalize Names</button>
+            </div>
+            <div class="cleanup-action">
+              <div>
+                <div class="cleanup-action-title">Smart Deduplicate <span class="ai-badge">AI</span></div>
+                <div class="muted cleanup-action-desc">Merges duplicate merchants with slight spelling differences, truncations, or location suffixes. One fast AI call.</div>
+              </div>
+              <button class="btn btn-secondary" id="dedup-btn" onclick="aiDeduplicate()">Smart Clean</button>
+            </div>
+            <div class="cleanup-action">
+              <div>
+                <div class="cleanup-action-title">Auto-categorize <span class="ai-badge">AI</span></div>
+                <div class="muted cleanup-action-desc">Uses AI to categorize anything still uncategorized. Requires an API key.</div>
+              </div>
+              <button class="btn btn-secondary" id="categorize-btn" onclick="runAICategorize()">Run AI</button>
+            </div>
+          </div>
+          <div id="cleanup-status" style="margin-top:1rem;display:none">
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" id="cleanup-bar"></div>
+            </div>
+            <div class="progress-message" id="cleanup-msg"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="view-budget" class="view">
+        <div class="page-header">
+          <h1>Budget</h1>
+          <div class="header-actions">
+            <select id="budget-month-select" onchange="state.budgetMonth=this.value;renderBudgetPerformance()"></select>
+          </div>
+        </div>
+
+        <p style="position:fixed;bottom:8px;right:14px;font-size:.7rem;color:#94a3b8;pointer-events:none;user-select:none;z-index:0;font-style:italic">Thanks TLC!</p>
+
+        <div class="card" id="bud-overview-card">
+          <div id="bud-overview-content"></div>
+        </div>
+
+        <div class="card" id="bud-breakdown-card" style="margin-top:1.25rem">
+          <div id="bud-breakdown-content"></div>
+        </div>
+      </div>
+
+      <div id="view-merchants" class="view">
+        <div class="page-header">
+          <h1>Merchant Memory</h1>
+        </div>
+        <div class="card">
+          <p class="muted">These are the categories automatically applied when a merchant is seen again.</p>
+          <div style="margin-top:1rem">
+            <input type="text" id="merchant-search" placeholder="Search merchants..." style="width:100%; max-width:320px" />
+          </div>
+          <div id="merchants-empty" class="empty-state" style="display:none">
+            <div class="empty-icon">🏪</div>
+            <p>No merchants saved yet. Upload a statement to get started.</p>
+          </div>
+          <table id="merchants-table" class="data-table" style="margin-top:1rem">
+            <thead>
+              <tr>
+                <th class="m-sortable" data-col="name" style="cursor:pointer;user-select:none">Merchant <span class="sort-arrow" id="msort-name"></span></th>
+                <th class="m-sortable" data-col="category" style="cursor:pointer;user-select:none">Category <span class="sort-arrow" id="msort-category"></span></th>
+                <th class="m-sortable" data-col="count" style="cursor:pointer;user-select:none">Txns <span class="sort-arrow" id="msort-count"></span></th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="merchants-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Category Modal -->
+  <div id="modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="modal-header-title">Categorize New Merchants</h2>
+        <p class="modal-subtitle" id="modal-subtitle"></p>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Skip for now</button>
+        <button class="btn btn-primary" onclick="saveCategories()">Save Categories</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit / Add Transaction Modal -->
+  <div id="edit-modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:440px">
+      <div class="modal-header">
+        <h2 id="edit-modal-title">Edit Transaction</h2>
+        <p class="modal-subtitle" id="edit-modal-subtitle">Fix parsing errors or add a personal note.</p>
+      </div>
+      <div class="modal-body" style="gap:.85rem">
+        <div class="edit-field">
+          <label class="edit-label">Merchant</label>
+          <input type="text" id="edit-merchant" />
+        </div>
+        <div style="display:flex;gap:.75rem">
+          <div class="edit-field" style="flex:1">
+            <label class="edit-label">Date</label>
+            <input type="date" id="edit-date" />
+          </div>
+          <div class="edit-field" style="flex:1">
+            <label class="edit-label">Amount ($)</label>
+            <input type="number" id="edit-amount" step="0.01" min="0" />
+          </div>
+        </div>
+        <div class="edit-field">
+          <label class="edit-label">Category</label>
+          <select id="edit-category"></select>
+        </div>
+        <div class="edit-field">
+          <label class="edit-label">Note</label>
+          <input type="text" id="edit-notes" placeholder="e.g. birthday dinner, work reimbursable" />
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="saveEditModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inline edit category dropdown (shared) -->
+  <div id="category-popup" class="category-popup" style="display:none">
+    <select id="category-popup-select"></select>
+    <button class="btn btn-sm btn-primary" onclick="saveCategoryPopup()">Save</button>
+    <button class="btn btn-sm btn-secondary" onclick="closeCategoryPopup()">Cancel</button>
+  </div>
+
+  <!-- Merchant Chart Modal -->
+  <div id="merchant-chart-overlay" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeMerchantChart()">
+    <div class="modal" style="max-width:580px;width:90%;position:relative">
+      <button class="modal-close" onclick="closeMerchantChart()" style="position:absolute;top:.75rem;right:.75rem;z-index:1">✕</button>
+      <div class="modal-header">
+        <div>
+          <div id="mcht-modal-title" class="modal-title"></div>
+          <div id="mcht-modal-sub" style="font-size:.8rem;color:var(--muted);margin-top:.2rem"></div>
+        </div>
+      </div>
+      <div style="padding:1.25rem 1.5rem 1.5rem">
+        <div id="mcht-modal-chart"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
