@@ -146,7 +146,6 @@ body {
 
 .trend-chart-wrap { margin-top: .75rem; }
 
-.dash-right-stack { height: 100%; }
 .dash-grow { flex: 1; min-height: 0; }
 #recurring-card { display: flex; flex-direction: column; }
 
@@ -543,7 +542,7 @@ body {
 .row-actions { display: flex; gap: .1rem; align-items: center; }
 
 #recurring-list { max-height: 210px; overflow-y: auto; padding-right: 4px; }
-#recurring-list::-webkit-scrollbar { width: 4px; }
+#recurring-list::-webkit-scrollbar { width: 6px; }
 #recurring-list::-webkit-scrollbar-track { background: transparent; }
 #recurring-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 #recurring-list::-webkit-scrollbar-thumb:hover { background: var(--muted); }
