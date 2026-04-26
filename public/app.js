@@ -1159,17 +1159,17 @@ async function identifyMerchant(txnId) {
       merchant: txn.merchant,
       rawMerchant: txn.rawSource || txn.merchant,
     });
-    const msg = `${data.name} — ${data.description || data.category}`;
-    if (confirm(`Identified as: ${msg}\n\nApply this name and category?`)) {
-      await api('PUT', `/api/transactions/${txnId}`, {
-        merchant: data.name,
-        category: data.category,
-      });
-      txn.merchant = data.name;
+    if (data.category) {
+      await api('PUT', `/api/transactions/${txnId}`, { category: data.category });
       txn.category = data.category;
+      await api('POST', '/api/merchants', { merchant: txn.merchant, category: data.category });
+      state.merchants = await api('GET', '/api/merchants');
+      state.txVersion++;
       renderTransactions();
       if (state.currentView === 'dashboard') { clearDashboardCaches(); renderDashboard(); }
-      showToast('Merchant identified and updated', 'success');
+      showToast(`Identified as ${data.name} · category set to "${data.category}"`, 'success');
+    } else {
+      showToast(`Identified as ${data.name} — no category found`, 'info');
     }
   } catch (err) {
     showToast('Could not identify merchant: ' + err.message, 'error');
@@ -1385,6 +1385,7 @@ function renderTransactions() {
               </td>
               <td>
                 <div class="row-actions">
+                  ${(!tc || tc === 'Unknown') && state.hasApiKey ? `<button class="identify-btn" id="identify-btn-${t.id}" onclick="event.stopPropagation();identifyMerchant('${t.id}')" title="Identify with AI">🔍</button>` : ''}
                   <button class="edit-btn" onclick="event.stopPropagation();openEditModal('${t.id}')" title="Edit">✏</button>
                   <button class="delete-btn" onclick="event.stopPropagation();deleteTransactionById('${t.id}')" title="Delete">🗑</button>
                 </div>
@@ -1614,8 +1615,9 @@ function openCategoryPopup(e, txnId) {
     CATEGORIES.map(c => `<option value="${esc(c)}" ${txn?.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('') +
     `<option value="__custom__">+ Custom…</option>`;
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  popup.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+  const anchor = e.currentTarget || e.target.closest('.category-badge') || e.target;
+  const rect = anchor.getBoundingClientRect();
+  popup.style.top = (rect.bottom + 6) + 'px';
   popup.style.left = rect.left + 'px';
   // Retrigger animation each open
   popup.style.animation = 'none';
@@ -1643,8 +1645,9 @@ function openCategoryPopupForMerchant(e, merchant) {
     CATEGORIES.map(c => `<option value="${esc(c)}" ${c === existing ? 'selected' : ''}>${esc(c)}</option>`).join('') +
     `<option value="__custom__">+ Custom…</option>`;
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  popup.style.top = (rect.bottom + window.scrollY + 6) + 'px';
+  const anchor = e.currentTarget || e.target.closest('.category-badge') || e.target;
+  const rect = anchor.getBoundingClientRect();
+  popup.style.top = (rect.bottom + 6) + 'px';
   popup.style.left = rect.left + 'px';
   popup.style.animation = 'none';
   popup.style.display = 'flex';
@@ -2390,7 +2393,7 @@ async function saveCategories() {
 function renderMerchants() {
   const entries = Object.entries(state.merchants);
   const search = (document.getElementById('merchant-search')?.value || '').toLowerCase();
-  const filtered = search ? entries.filter(([m]) => m.toLowerCase().includes(search)) : entries;
+  const filtered = search ? entries.filter(([m]) => typeof m === 'string' && m.toLowerCase().includes(search)) : entries;
 
   const txnCounts = {};
   for (const t of state.transactions) {
@@ -2428,6 +2431,7 @@ function renderMerchants() {
 
   if (!filtered.length) {
     empty.style.display = '';
+    empty.querySelector('p').textContent = search ? `No merchants match "${search}"` : 'No merchants saved yet. Upload a statement to get started.';
     table.style.display = 'none';
     return;
   }
