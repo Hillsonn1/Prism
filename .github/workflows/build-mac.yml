@@ -7,19 +7,17 @@ on:
 
 jobs:
   build-mac:
-    runs-on: macos-latest
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
-
-      - name: Bundle frontend
-        run: node bundle-public.js
+        run: npm ci
 
       - name: Build Mac DMG
         run: npm run build:mac -- --publish never
