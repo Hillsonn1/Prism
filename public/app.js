@@ -442,6 +442,7 @@ function displayAnomalies(anomalies) {
 
 function dismissAnomaly(i, key) {
   state.dismissedAnomalies.add(key);
+  try { localStorage.setItem('prism_dismissed_anomalies', JSON.stringify([...state.dismissedAnomalies])); } catch {}
   const row = document.getElementById(`anomaly-row-${i}`);
   if (row) row.remove();
   const card = document.getElementById('anomalies-card');
@@ -2616,6 +2617,11 @@ function escAttr(str) {
 
 // ---- Init ----
 (async () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('prism_dismissed_anomalies') || '[]');
+    state.dismissedAnomalies = new Set(saved);
+  } catch {}
+
   try {
     await loadAll();
   } catch (err) {
