@@ -1359,6 +1359,7 @@ function renderTransactions() {
           </td>
           <td>
             <div class="row-actions">
+              ${(!cat || cat === 'Unknown') && state.hasApiKey ? `<button class="identify-btn" id="identify-btn-${g.txns[0].id}" onclick="event.stopPropagation();identifyMerchant('${g.txns[0].id}')" title="Identify with AI">🔍</button>` : ''}
               <button class="edit-btn" onclick="event.stopPropagation();renameVendorGroup('${escAttr(g.merchant)}')" title="Rename all">✏</button>
               <button class="delete-btn" onclick="event.stopPropagation();deleteVendorGroup('${escAttr(g.merchant)}',${g.count})" title="Delete all">🗑</button>
             </div>
