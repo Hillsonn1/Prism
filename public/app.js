@@ -530,8 +530,13 @@ function refreshInsights() {
 }
 
 function clearDashboardCaches() {
+  state.anomaliesCache = {};
+}
+
+function clearAllCaches() {
   state.insightsCache = {};
   state.anomaliesCache = {};
+  state.budgetInsight = {};
 }
 
 function toggleTrendView() {
@@ -586,8 +591,6 @@ async function renderBudgetPerformance({ skipAI = false } = {}) {
   state.editingExpenseId = null;
   state.addingExpense = false;
   state.editingBudgetTarget = false;
-  // Don't carry a stale cached insight when re-entering the tab
-  if (!skipAI) delete state.budgetInsight[state.budgetMonth];
   try {
     const [inc, exp] = await Promise.all([
       api('GET', `/api/income/${state.budgetMonth}`),
@@ -2004,6 +2007,7 @@ async function uploadFile(file) {
           <div class="upload-stat"><div class="stat-label">Needs input</div><div class="stat-value">${unknowns.length}</div></div>
         </div>`;
 
+      clearAllCaches();
       await loadAll();
       if (suggs.length + unknowns.length > 0) showCategoryModal(suggs, unknowns);
       else showToast('Import complete!', 'success');
@@ -2187,6 +2191,7 @@ async function deleteSource(source) {
   if (!confirm(`Remove all transactions from "${source}"?`)) return;
   try {
     await api('DELETE', `/api/transactions?source=${encodeURIComponent(source)}`);
+    clearAllCaches();
     await loadAll();
     await renderSources();
     renderDashboard();
