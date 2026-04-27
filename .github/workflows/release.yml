@@ -51,14 +51,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Mac DMGs
-        run: npm run build:mac -- --publish never
+      - name: Build Mac DMG (arm64)
+        run: npm run build:mac -- --publish never --arm64
 
-      - name: Upload Mac artifacts
+      - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
         with:
           name: mac-build
-          path: dist/*.dmg
+          path: dist/Prism-arm64.dmg
 
   # ── Create GitHub Release with all binaries ──────────────────────────────────
   release:

@@ -305,46 +305,20 @@
   const BASE_URL    = `https://github.com/${GITHUB_REPO}/releases/latest/download`;
 
   const DOWNLOADS = {
-    windows: { url: `${BASE_URL}/Prism-Setup.exe`,    label: 'Download for Windows',            icon: '🪟', ext: '.exe' },
-    macArm:  { url: `${BASE_URL}/Prism-arm64.dmg`,    label: 'Download for Mac (Apple Silicon)', icon: '', ext: '.dmg' },
-    macX64:  { url: `${BASE_URL}/Prism-x64.dmg`,      label: 'Download for Mac (Intel)',         icon: '', ext: '.dmg' },
+    windows: { url: `${BASE_URL}/Prism-Setup.exe`,  label: 'Download for Windows',     icon: '🪟' },
+    mac:     { url: `${BASE_URL}/Prism-arm64.dmg`,  label: 'Download for Mac',          icon: '' },
   };
-
-  // ---- Platform Detection ----
-  function detectPlatform() {
-    const ua  = navigator.userAgent || '';
-    const plat = (navigator.platform || '').toLowerCase();
-    if (plat.startsWith('win') || ua.includes('Windows')) return 'windows';
-    if (plat.startsWith('mac') || ua.includes('Macintosh')) {
-      // Heuristic: Apple Silicon Macs running Chrome/Safari show arm or report
-      // via userAgentData. Rosetta-translated browsers report x86 architecture.
-      const uaData = navigator.userAgentData;
-      if (uaData && uaData.getHighEntropyValues) {
-        uaData.getHighEntropyValues(['architecture']).then(data => {
-          if (data.architecture && data.architecture.includes('arm')) {
-            setPrimary('macArm', ['windows', 'macX64']);
-          } else {
-            setPrimary('macX64', ['windows', 'macArm']);
-          }
-        }).catch(() => setPrimary('macArm', ['windows', 'macX64']));
-        return null; // resolved async
-      }
-      return 'macArm'; // default to Apple Silicon for modern Macs
-    }
-    return 'windows'; // fallback
-  }
 
   function setPrimary(primaryKey, altKeys) {
     const primary = DOWNLOADS[primaryKey];
-    const btn = document.getElementById('btn-primary');
-    const icon = document.getElementById('btn-icon');
+    const btn   = document.getElementById('btn-primary');
+    const icon  = document.getElementById('btn-icon');
     const label = document.getElementById('btn-label');
     if (btn && primary) {
       btn.href = primary.url;
-      if (icon) icon.textContent = primary.icon;
+      if (icon)  icon.textContent  = primary.icon;
       if (label) label.textContent = primary.label;
     }
-
     const altWrap = document.getElementById('alt-links');
     if (altWrap) {
       altWrap.innerHTML = altKeys.map((k, i) => {
@@ -356,22 +330,18 @@
   }
 
   function init() {
-    const platform = detectPlatform();
-
-    // Update footer GitHub link
     const footerLink = document.getElementById('footer-repo-link');
     if (footerLink) footerLink.href = `https://github.com/${GITHUB_REPO}`;
 
-    if (platform === null) return; // async path handled above
-    if (platform === 'windows') {
-      setPrimary('windows', ['macArm', 'macX64']);
-    } else if (platform === 'macX64') {
-      setPrimary('macX64', ['windows', 'macArm']);
+    const ua   = navigator.userAgent || '';
+    const plat = (navigator.platform || '').toLowerCase();
+    const isMac = plat.startsWith('mac') || ua.includes('Macintosh');
+    if (isMac) {
+      setPrimary('mac', ['windows']);
     } else {
-      setPrimary('macArm', ['windows', 'macX64']);
+      setPrimary('windows', ['mac']);
     }
 
-    // Fetch and show latest version
     fetch('/version.json', { cache: 'no-store' })
       .then(r => r.json())
       .then(data => {
