@@ -57,7 +57,7 @@ jobs:
           const fs = require('fs');
           const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
           pkg.build.mac.target = [{ target: 'zip', arch: ['arm64'] }];
-          pkg.build.zip = { artifactName: 'Prism-mac-arm64.zip' };
+          pkg.build.mac.artifactName = 'Prism-mac-arm64.zip';
           fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
           "
 
