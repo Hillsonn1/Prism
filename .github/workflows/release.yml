@@ -37,7 +37,7 @@ jobs:
           name: windows-build
           path: dist/Prism-Setup.exe
 
-  # ── Build Mac DMGs (x64 + arm64 via cross-compile on macos-13) ──────────────
+  # ── Build Mac zip (arm64) — zip avoids the hdiutil bug in electron-builder ────
   build-mac:
     runs-on: macos-14
     steps:
@@ -51,14 +51,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Mac DMG (arm64)
-        run: npm run build:mac -- --publish never --arm64
+      - name: Override mac target to arm64 zip for CI
+        run: |
+          node -e "
+          const fs = require('fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          pkg.build.mac.target = [{ target: 'zip', arch: ['arm64'] }];
+          pkg.build.zip = { artifactName: 'Prism-mac-arm64.zip' };
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Build Mac (arm64 zip)
+        run: npm run build:mac -- --publish never
 
       - name: Upload Mac artifact
         uses: actions/upload-artifact@v4
         with:
           name: mac-build
-          path: dist/Prism-arm64.dmg
+          path: dist/Prism-mac-arm64.zip
 
   # ── Create GitHub Release with all binaries ──────────────────────────────────
   release:
