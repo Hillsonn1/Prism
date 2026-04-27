@@ -56,10 +56,12 @@
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "artifactName": "Prism-Setup.exe"
     },
     "dmg": {
-      "title": "Prism"
+      "title": "Prism",
+      "artifactName": "Prism-${arch}.dmg"
     }
   },
   "dependencies": {

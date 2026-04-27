@@ -37,6 +37,12 @@
     </aside>
 
     <main class="main-content">
+      <div id="update-bar" class="update-bar" style="display:none" role="alert">
+        <span class="update-bar-icon">&#8593;</span>
+        <p class="update-bar-text"></p>
+        <a class="update-bar-btn" id="update-bar-link" href="#" target="_blank" rel="noopener">Download</a>
+        <button class="update-bar-close" onclick="dismissUpdateBanner()" aria-label="Dismiss">&#x2715;</button>
+      </div>
       <div id="view-dashboard" class="view active">
         <div class="page-header">
           <h1>Dashboard</h1>

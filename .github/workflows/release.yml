@@ -1,0 +1,107 @@
+name: Release
+
+# Triggered by pushing a version tag, e.g.: git tag v1.0.1 && git push --tags
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+jobs:
+
+  # ── Build Windows installer ──────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows installer
+        run: npm run build:win -- --publish never
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist/Prism-Setup.exe
+
+  # ── Build Mac DMGs (x64 + arm64 via cross-compile on macos-13) ──────────────
+  build-mac:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Mac DMGs
+        run: npm run build:mac -- --publish never
+
+      - name: Upload Mac artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-build
+          path: dist/*.dmg
+
+  # ── Create GitHub Release with all binaries ──────────────────────────────────
+  release:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: release-files
+
+      - name: Download Mac builds
+        uses: actions/download-artifact@v4
+        with:
+          name: mac-build
+          path: release-files
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release-files/*
+          generate_release_notes: true
+
+  # ── Deploy landing page + version.json to Netlify ────────────────────────────
+  # Requires two GitHub repo secrets:
+  #   NETLIFY_AUTH_TOKEN  — generate at https://app.netlify.com/user/applications
+  #   NETLIFY_SITE_ID     — found in Site Settings → General → Site ID
+  #
+  # The GitHub repo must be PUBLIC for the releases/latest/download/ URLs to work
+  # without authentication.
+  deploy-site:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Write version.json for this release
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          printf '{"version":"%s","siteUrl":"https://useprism.netlify.app"}\n' "$VERSION" > site/version.json
+
+      - name: Install Netlify CLI
+        run: npm install -g netlify-cli
+
+      - name: Deploy to Netlify
+        run: netlify deploy --dir=site --prod --message "Release $GITHUB_REF_NAME"
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}

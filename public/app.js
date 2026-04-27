@@ -1,3 +1,45 @@
+// ---- Update Check ----
+// After setting up Netlify and GitHub, replace these with your actual URLs
+const PRISM_UPDATE_URL = 'https://useprism.netlify.app/version.json';
+const PRISM_SITE_URL   = 'https://useprism.netlify.app';
+
+function semverGt(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
+
+async function checkForUpdate() {
+  try {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), 5000);
+    const remote = await fetch(PRISM_UPDATE_URL, { cache: 'no-store', signal: ctrl.signal }).then(r => r.json());
+    const local  = await fetch('/api/version').then(r => r.json());
+    if (!remote.version || !local.version) return;
+    if (!semverGt(remote.version, local.version)) return;
+    if (localStorage.getItem('prism_dismissed_update') === remote.version) return;
+    const bar = document.getElementById('update-bar');
+    if (!bar) return;
+    bar.dataset.version = remote.version;
+    bar.querySelector('.update-bar-text').textContent =
+      `Prism v${remote.version} is available — you have v${local.version}.`;
+    const link = document.getElementById('update-bar-link');
+    if (link) link.href = remote.siteUrl || PRISM_SITE_URL;
+    bar.style.display = 'flex';
+  } catch {}
+}
+
+function dismissUpdateBanner() {
+  const bar = document.getElementById('update-bar');
+  if (!bar) return;
+  if (bar.dataset.version) localStorage.setItem('prism_dismissed_update', bar.dataset.version);
+  bar.style.display = 'none';
+}
+
 // ---- Utilities ----
 function debounce(fn, ms) {
   let t;
@@ -2627,6 +2669,8 @@ function escAttr(str) {
     const saved = JSON.parse(localStorage.getItem('prism_dismissed_anomalies') || '[]');
     state.dismissedAnomalies = new Set(saved);
   } catch {}
+
+  checkForUpdate();
 
   try {
     await loadAll();

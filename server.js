@@ -1790,6 +1790,11 @@ app.post('/api/budgets/suggest', async (req, res) => {
 
 migrateToTitleCase();
 
+app.get('/api/version', (_req, res) => {
+  try { res.json({ version: require('./package.json').version || '0.0.0' }); }
+  catch { res.json({ version: '0.0.0' }); }
+});
+
 const server = app.listen(PORT, () => {
   console.log(`\nPrism is running!`);
   console.log(`Open http://localhost:${PORT} in your browser`);

@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prism — Personal Finance Tracker</title>
+  <meta name="description" content="Prism is a private, AI-powered spending tracker for Mac and Windows. Upload bank statements, track categories, and get smart insights — entirely on your device." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:   #394c68;
+      --brand-d: #2a3a52;
+      --primary: #2563eb;
+      --primary-h: #1d4ed8;
+      --bg:      #f8fafc;
+      --surface: #ffffff;
+      --border:  #e2e8f0;
+      --text:    #1e293b;
+      --muted:   #64748b;
+      --radius:  12px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* ---- Hero ---- */
+    .hero {
+      background: linear-gradient(160deg, var(--brand-d) 0%, var(--brand) 100%);
+      color: #e2e8f0;
+      text-align: center;
+      padding: 5rem 1.5rem 4.5rem;
+    }
+
+    .hero-wordmark {
+      display: inline-flex;
+      align-items: center;
+      gap: .55rem;
+      margin-bottom: 2.5rem;
+    }
+
+    .hero-prism {
+      width: 38px;
+      height: 38px;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .hero-prism svg { width: 100%; height: 100%; }
+
+    .hero-name {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: -.02em;
+      color: #f1f5f9;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.25rem);
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -.03em;
+      color: #f8fafc;
+      margin-bottom: 1.25rem;
+    }
+
+    .hero-sub {
+      font-size: 1.1rem;
+      color: #94a3b8;
+      max-width: 560px;
+      margin: 0 auto 2.75rem;
+      line-height: 1.65;
+    }
+
+    /* ---- Download buttons ---- */
+    .download-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.1rem;
+    }
+
+    .download-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .9rem 2rem;
+      background: var(--primary);
+      color: #fff;
+      border-radius: var(--radius);
+      font-size: 1.05rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: background .15s, transform .12s, box-shadow .15s;
+      box-shadow: 0 4px 14px rgba(37,99,235,.4);
+    }
+    .download-primary:hover {
+      background: var(--primary-h);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(37,99,235,.45);
+    }
+    .download-primary:active { transform: translateY(0); }
+
+    .download-platform-icon { font-size: 1.2rem; line-height: 1; }
+
+    .download-alt {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: .5rem .75rem;
+    }
+    .download-alt a {
+      color: #7dd3fc;
+      font-size: .88rem;
+      text-decoration: none;
+      border-bottom: 1px solid transparent;
+      transition: color .12s, border-color .12s;
+    }
+    .download-alt a:hover { color: #bae6fd; border-color: #bae6fd; }
+    .download-alt .sep { color: #4f6580; user-select: none; }
+
+    .version-note {
+      font-size: .78rem;
+      color: #4f6580;
+      margin-top: .3rem;
+    }
+
+    /* ---- Features ---- */
+    .features {
+      padding: 5rem 1.5rem;
+      background: var(--surface);
+    }
+
+    .section-label {
+      text-align: center;
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--primary);
+      margin-bottom: .75rem;
+    }
+
+    .section-title {
+      text-align: center;
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 800;
+      letter-spacing: -.025em;
+      color: var(--text);
+      margin-bottom: 3rem;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1.5rem;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .feature-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.75rem 1.5rem;
+      transition: box-shadow .15s, transform .15s;
+    }
+    .feature-card:hover {
+      box-shadow: 0 4px 20px rgba(0,0,0,.08);
+      transform: translateY(-2px);
+    }
+
+    .feature-icon {
+      font-size: 1.75rem;
+      margin-bottom: 1rem;
+      display: block;
+    }
+
+    .feature-title {
+      font-size: .98rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: .4rem;
+    }
+
+    .feature-desc {
+      font-size: .88rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* ---- Private note ---- */
+    .private-strip {
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 1.5rem;
+      text-align: center;
+    }
+    .private-strip p {
+      max-width: 560px;
+      margin: 0 auto;
+      color: var(--muted);
+      font-size: .92rem;
+      line-height: 1.65;
+    }
+    .private-strip strong { color: var(--text); }
+
+    /* ---- Footer ---- */
+    footer {
+      background: var(--brand-d);
+      color: #64748b;
+      text-align: center;
+      padding: 2rem 1.5rem;
+      font-size: .82rem;
+    }
+    footer a { color: #7dd3fc; text-decoration: none; }
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 600px) {
+      .hero { padding: 3.5rem 1rem 3rem; }
+      .features { padding: 3.5rem 1rem; }
+    }
+  </style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-wordmark">
+    <div class="hero-prism">
+      <svg viewBox="0 0 38 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="19,3 35,32 3,32" fill="none" stroke="#7dd3fc" stroke-width="2.5" stroke-linejoin="round"/>
+        <line x1="19" y1="3" x2="19" y2="32" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="3,3"/>
+        <line x1="19" y1="3" x2="3" y2="32" stroke="#818cf8" stroke-width="1" stroke-dasharray="2,4" opacity=".6"/>
+        <circle cx="19" cy="3" r="2" fill="#7dd3fc"/>
+      </svg>
+    </div>
+    <span class="hero-name">Prism</span>
+  </div>
+
+  <h1>Your personal finance,<br>finally clear.</h1>
+  <p class="hero-sub">Upload bank statements, track spending by category, and get AI-powered insights — all on your own computer. No accounts. No cloud. Just clarity.</p>
+
+  <div class="download-wrap">
+    <div id="primary-download">
+      <!-- Filled in by JS based on platform -->
+      <a class="download-primary" href="#" id="btn-primary">
+        <span class="download-platform-icon" id="btn-icon"></span>
+        <span id="btn-label">Download Prism</span>
+      </a>
+    </div>
+
+    <div class="download-alt" id="alt-links">
+      <!-- Filled in by JS -->
+    </div>
+
+    <p class="version-note" id="version-note"></p>
+  </div>
+</section>
+
+<section class="features">
+  <p class="section-label">Everything you need</p>
+  <h2 class="section-title">Finance tracking that works for you</h2>
+  <div class="features-grid">
+    <div class="feature-card">
+      <span class="feature-icon">📂</span>
+      <p class="feature-title">Upload any statement</p>
+      <p class="feature-desc">Paste or upload CSV and PDF bank statements from any bank or credit card. Prism parses and deduplicates automatically.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">📊</span>
+      <p class="feature-title">Instant dashboard</p>
+      <p class="feature-desc">See spending by category, monthly trends, top merchants, and recurring transactions at a glance — updated as you import.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">✦</span>
+      <p class="feature-title">AI-powered insights</p>
+      <p class="feature-desc">Connect an Anthropic API key to unlock smart category suggestions, anomaly alerts, and natural-language budget advice.</p>
+    </div>
+    <div class="feature-card">
+      <span class="feature-icon">💰</span>
+      <p class="feature-title">Budget tracking</p>
+      <p class="feature-desc">Set monthly limits per category, track income and fixed expenses, and see exactly how much headroom you have left.</p>
+    </div>
+  </div>
+</section>
+
+<div class="private-strip">
+  <p><strong>Completely private.</strong> Prism runs entirely on your Mac or Windows PC. Your financial data never leaves your device — there are no servers, no accounts, and no subscription fees.</p>
+</div>
+
+<footer>
+  <p>Prism &mdash; personal finance tracker &nbsp;&middot;&nbsp; <a href="https://github.com/GITHUB_USER/GITHUB_REPO" id="footer-repo-link">GitHub</a></p>
+</footer>
+
+<script>
+  // ---- Configuration ----
+  // TODO: Replace with your actual GitHub username and repo name
+  const GITHUB_REPO = 'GITHUB_USER/GITHUB_REPO';
+  const BASE_URL    = `https://github.com/${GITHUB_REPO}/releases/latest/download`;
+
+  const DOWNLOADS = {
+    windows: { url: `${BASE_URL}/Prism-Setup.exe`,    label: 'Download for Windows',            icon: '🪟', ext: '.exe' },
+    macArm:  { url: `${BASE_URL}/Prism-arm64.dmg`,    label: 'Download for Mac (Apple Silicon)', icon: '', ext: '.dmg' },
+    macX64:  { url: `${BASE_URL}/Prism-x64.dmg`,      label: 'Download for Mac (Intel)',         icon: '', ext: '.dmg' },
+  };
+
+  // ---- Platform Detection ----
+  function detectPlatform() {
+    const ua  = navigator.userAgent || '';
+    const plat = (navigator.platform || '').toLowerCase();
+    if (plat.startsWith('win') || ua.includes('Windows')) return 'windows';
+    if (plat.startsWith('mac') || ua.includes('Macintosh')) {
+      // Heuristic: Apple Silicon Macs running Chrome/Safari show arm or report
+      // via userAgentData. Rosetta-translated browsers report x86 architecture.
+      const uaData = navigator.userAgentData;
+      if (uaData && uaData.getHighEntropyValues) {
+        uaData.getHighEntropyValues(['architecture']).then(data => {
+          if (data.architecture && data.architecture.includes('arm')) {
+            setPrimary('macArm', ['windows', 'macX64']);
+          } else {
+            setPrimary('macX64', ['windows', 'macArm']);
+          }
+        }).catch(() => setPrimary('macArm', ['windows', 'macX64']));
+        return null; // resolved async
+      }
+      return 'macArm'; // default to Apple Silicon for modern Macs
+    }
+    return 'windows'; // fallback
+  }
+
+  function setPrimary(primaryKey, altKeys) {
+    const primary = DOWNLOADS[primaryKey];
+    const btn = document.getElementById('btn-primary');
+    const icon = document.getElementById('btn-icon');
+    const label = document.getElementById('btn-label');
+    if (btn && primary) {
+      btn.href = primary.url;
+      if (icon) icon.textContent = primary.icon;
+      if (label) label.textContent = primary.label;
+    }
+
+    const altWrap = document.getElementById('alt-links');
+    if (altWrap) {
+      altWrap.innerHTML = altKeys.map((k, i) => {
+        const d = DOWNLOADS[k];
+        return (i > 0 ? '<span class="sep">&middot;</span>' : '') +
+          `<a href="${d.url}">${d.icon} ${d.label}</a>`;
+      }).join('');
+    }
+  }
+
+  function init() {
+    const platform = detectPlatform();
+
+    // Update footer GitHub link
+    const footerLink = document.getElementById('footer-repo-link');
+    if (footerLink) footerLink.href = `https://github.com/${GITHUB_REPO}`;
+
+    if (platform === null) return; // async path handled above
+    if (platform === 'windows') {
+      setPrimary('windows', ['macArm', 'macX64']);
+    } else if (platform === 'macX64') {
+      setPrimary('macX64', ['windows', 'macArm']);
+    } else {
+      setPrimary('macArm', ['windows', 'macX64']);
+    }
+
+    // Fetch and show latest version
+    fetch('/version.json', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(data => {
+        const note = document.getElementById('version-note');
+        if (note && data.version) note.textContent = `Latest version: v${data.version}`;
+      })
+      .catch(() => {});
+  }
+
+  init();
+</script>
+
+</body>
+</html>

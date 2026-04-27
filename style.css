@@ -1896,6 +1896,47 @@ select:focus {
 }
 .btn-ghost:hover { background: var(--surface); color: var(--text); border-color: var(--border); }
 
+/* ---- Update Banner ---- */
+.update-bar {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .55rem 1.25rem;
+  background: #dbeafe;
+  border-bottom: 1px solid #bfdbfe;
+  color: #1e40af;
+  font-size: .84rem;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.update-bar-icon { font-size: 1rem; flex-shrink: 0; }
+.update-bar-text { flex: 1; margin: 0; }
+.update-bar-btn {
+  padding: .28rem .8rem;
+  background: var(--primary);
+  color: #fff;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: .78rem;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background .15s;
+}
+.update-bar-btn:hover { background: var(--primary-hover); }
+.update-bar-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #60a5fa;
+  font-size: .85rem;
+  padding: .2rem .45rem;
+  line-height: 1;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: background .12s, color .12s;
+}
+.update-bar-close:hover { background: #bfdbfe; color: #1e40af; }
+
 /* ---- Scrollbars ---- */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
