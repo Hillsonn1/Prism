@@ -5,6 +5,12 @@ on:
   push:
     tags:
       - 'v[0-9]*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. 1.0.1)'
+        required: true
+        default: '1.0.1'
 
 jobs:
 
@@ -94,7 +100,8 @@ jobs:
 
       - name: Write version.json for this release
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${{ github.event.inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
           printf '{"version":"%s","siteUrl":"https://charming-lebkuchen-648010.netlify.app"}\n' "$VERSION" > site/version.json
 
       - name: Install Netlify CLI
