@@ -194,6 +194,83 @@
     }
     .private-strip strong { color: var(--text); }
 
+    /* ---- Download Modals ---- */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+      z-index: 999;
+      align-items: center;
+      justify-content: center;
+      padding: 1.5rem;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--surface);
+      border-radius: 16px;
+      max-width: 500px;
+      width: 100%;
+      padding: 2.25rem 2rem 2rem;
+      position: relative;
+      box-shadow: 0 20px 60px rgba(0,0,0,.25);
+      animation: modalIn .18s ease;
+    }
+    @keyframes modalIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .modal-close {
+      position: absolute;
+      top: 1rem; right: 1rem;
+      background: none; border: none;
+      font-size: 1.1rem; cursor: pointer;
+      color: var(--muted); line-height: 1;
+      padding: .25rem .4rem;
+      border-radius: 6px;
+      transition: background .12s, color .12s;
+    }
+    .modal-close:hover { background: var(--bg); color: var(--text); }
+    .modal-icon { font-size: 2rem; margin-bottom: .75rem; }
+    .modal-title {
+      font-size: 1.2rem; font-weight: 800;
+      color: var(--text); margin-bottom: .5rem;
+    }
+    .modal-intro { color: var(--muted); font-size: .9rem; margin-bottom: 1.25rem; }
+    .modal-steps { list-style: none; display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1.75rem; }
+    .modal-steps li {
+      display: flex; gap: .75rem; align-items: flex-start;
+      font-size: .88rem; color: var(--text); line-height: 1.55;
+    }
+    .step-num {
+      background: #dbeafe; color: #1e40af;
+      font-weight: 700; font-size: .75rem;
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: .05rem;
+    }
+    .modal-safe {
+      font-size: .8rem; color: var(--muted);
+      background: var(--bg); border-radius: 8px;
+      padding: .6rem .9rem; margin-bottom: 1.5rem;
+      border: 1px solid var(--border);
+    }
+    .modal-safe a { color: var(--primary); text-decoration: none; }
+    .modal-safe a:hover { text-decoration: underline; }
+    .modal-actions { display: flex; gap: .75rem; justify-content: flex-end; }
+    .modal-btn-secondary {
+      padding: .55rem 1.1rem; border-radius: 8px;
+      border: 1px solid var(--border); background: none;
+      color: var(--muted); font-size: .88rem; cursor: pointer;
+      transition: background .12s;
+    }
+    .modal-btn-secondary:hover { background: var(--bg); }
+    .modal-btn-primary {
+      padding: .55rem 1.4rem; border-radius: 8px;
+      background: var(--primary); color: #fff;
+      border: none; font-size: .88rem; font-weight: 700;
+      cursor: pointer; transition: background .15s;
+      text-decoration: none; display: inline-flex; align-items: center; gap: .4rem;
+    }
+    .modal-btn-primary:hover { background: var(--primary-h); }
+
     /* ---- Bug Report ---- */
     .bug-section {
       background: var(--surface);
@@ -310,6 +387,68 @@
   <p><strong>Completely private.</strong> Prism runs entirely on your Mac or Windows PC. Your financial data never leaves your device — there are no servers, no accounts, and no subscription fees.</p>
 </div>
 
+<!-- Windows download modal -->
+<div class="modal-overlay" id="modal-windows">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()" aria-label="Close">&#x2715;</button>
+    <div class="modal-icon">🪟</div>
+    <p class="modal-title">Before you download on Windows</p>
+    <p class="modal-intro">Windows and your browser may flag Prism as unrecognized. This is normal for new apps that haven't built up a download history yet — not a sign that anything is wrong.</p>
+    <ul class="modal-steps">
+      <li>
+        <span class="step-num">1</span>
+        <span><strong>Browser warning:</strong> If you see "This file may be harmful", click the <strong>⋮ menu</strong> next to the file → <strong>Keep</strong> or <strong>Keep anyway</strong>.</span>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <span><strong>Windows SmartScreen:</strong> If a blue screen appears saying "Windows protected your PC", click <strong>More info</strong> → <strong>Run anyway</strong>.</span>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <span>Install normally — Prism will appear in your Start menu and desktop.</span>
+      </li>
+    </ul>
+    <p class="modal-safe">🔒 Prism is fully open source. You can <a href="https://github.com/Hillsonn1/Prism" target="_blank">read every line of code on GitHub</a>.</p>
+    <div class="modal-actions">
+      <button class="modal-btn-secondary" onclick="closeModal()">Cancel</button>
+      <a class="modal-btn-primary" id="win-download-btn" href="#">&#8595; Continue to Download</a>
+    </div>
+  </div>
+</div>
+
+<!-- Mac download modal -->
+<div class="modal-overlay" id="modal-mac">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()" aria-label="Close">&#x2715;</button>
+    <div class="modal-icon"></div>
+    <p class="modal-title">Installing Prism on Mac</p>
+    <p class="modal-intro">Since Prism isn't distributed through the App Store, macOS will ask you to confirm it's safe to open. Here's how to install it in a few steps.</p>
+    <ul class="modal-steps">
+      <li>
+        <span class="step-num">1</span>
+        <span><strong>Download and unzip</strong> the file. Double-click the .zip and a <strong>Prism.app</strong> file will appear.</span>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <span><strong>Drag Prism.app</strong> to your <strong>Applications</strong> folder.</span>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <span><strong>Right-click</strong> Prism.app → click <strong>Open</strong> → click <strong>Open</strong> again in the dialog. You only need to do this the first time.</span>
+      </li>
+      <li>
+        <span class="step-num">4</span>
+        <span>If you don't see the Open option: go to <strong>System Settings → Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> next to Prism.</span>
+      </li>
+    </ul>
+    <p class="modal-safe">🔒 Prism is fully open source. You can <a href="https://github.com/Hillsonn1/Prism" target="_blank">read every line of code on GitHub</a>.</p>
+    <div class="modal-actions">
+      <button class="modal-btn-secondary" onclick="closeModal()">Cancel</button>
+      <a class="modal-btn-primary" id="mac-download-btn" href="#">&#8595; Continue to Download</a>
+    </div>
+  </div>
+</div>
+
 <section class="bug-section">
   <div class="bug-inner">
     <p class="section-label">Feedback</p>
@@ -344,13 +483,40 @@
     mac:     { url: `${BASE_URL}/Prism-mac-arm64.zip`, label: 'Download for Mac', icon: '' },
   };
 
+  function openModal(platform) {
+    const url = DOWNLOADS[platform].url;
+    if (platform === 'windows') {
+      document.getElementById('win-download-btn').href = url;
+      document.getElementById('modal-windows').classList.add('open');
+    } else {
+      document.getElementById('mac-download-btn').href = url;
+      document.getElementById('modal-mac').classList.add('open');
+    }
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
+    document.body.style.overflow = '';
+  }
+
+  // Close on backdrop click
+  document.querySelectorAll('.modal-overlay').forEach(m => {
+    m.addEventListener('click', e => { if (e.target === m) closeModal(); });
+  });
+
+  // Close on Escape
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
   function setPrimary(primaryKey, altKeys) {
     const primary = DOWNLOADS[primaryKey];
     const btn   = document.getElementById('btn-primary');
     const icon  = document.getElementById('btn-icon');
     const label = document.getElementById('btn-label');
     if (btn && primary) {
-      btn.href = primary.url;
+      btn.removeAttribute('href');
+      btn.style.cursor = 'pointer';
+      btn.onclick = e => { e.preventDefault(); openModal(primaryKey); };
       if (icon)  icon.textContent  = primary.icon;
       if (label) label.textContent = primary.label;
     }
@@ -359,7 +525,7 @@
       altWrap.innerHTML = altKeys.map((k, i) => {
         const d = DOWNLOADS[k];
         return (i > 0 ? '<span class="sep">&middot;</span>' : '') +
-          `<a href="${d.url}">${d.icon} ${d.label}</a>`;
+          `<a href="#" onclick="event.preventDefault();openModal('${k}')">${d.icon} ${d.label}</a>`;
       }).join('');
     }
   }
