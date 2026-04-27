@@ -95,7 +95,7 @@ jobs:
       - name: Write version.json for this release
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          printf '{"version":"%s","siteUrl":"https://useprism.netlify.app"}\n' "$VERSION" > site/version.json
+          printf '{"version":"%s","siteUrl":"https://charming-lebkuchen-648010.netlify.app"}\n' "$VERSION" > site/version.json
 
       - name: Install Netlify CLI
         run: npm install -g netlify-cli
