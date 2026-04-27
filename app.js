@@ -136,7 +136,11 @@ function switchView(view, { skipHistory = false, clearHistory = false } = {}) {
 
   if (view === 'dashboard') renderDashboard();
   if (view === 'transactions') renderTransactions();
-  if (view === 'upload') renderSources();
+  if (view === 'upload') {
+    document.getElementById('upload-zone').style.display = '';
+    document.getElementById('pending-upload-panel').style.display = 'none';
+    renderSources();
+  }
   if (view === 'merchants') renderMerchants();
   if (view === 'budget') renderBudget();
   if (view === 'settings') renderSettings();
@@ -2015,6 +2019,7 @@ async function uploadFile(file) {
 
       clearAllCaches();
       await loadAll();
+      document.getElementById('upload-zone').style.display = '';
       if (suggs.length + unknowns.length > 0) showCategoryModal(suggs, unknowns);
       else showToast('Import complete!', 'success');
     } else {
@@ -2025,6 +2030,7 @@ async function uploadFile(file) {
   es.onerror = () => {
     es.close();
     resultEl.innerHTML = `<div class="result-error">❌ Upload failed — check the server is running.</div>`;
+    document.getElementById('upload-zone').style.display = '';
   };
 }
 
