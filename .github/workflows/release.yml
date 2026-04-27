@@ -133,7 +133,7 @@ jobs:
         run: |
           VERSION="${{ github.event.inputs.version || github.ref_name }}"
           VERSION="${VERSION#v}"
-          printf '{"version":"%s","siteUrl":"https://charming-lebkuchen-648010.netlify.app"}\n' "$VERSION" > site/version.json
+          printf '{"version":"%s","siteUrl":"https://prismspendtracker.netlify.app"}\n' "$VERSION" > site/version.json
 
       - name: Install Netlify CLI
         run: npm install -g netlify-cli

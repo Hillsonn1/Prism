@@ -1,7 +1,7 @@
 // ---- Update Check ----
 // After setting up Netlify and GitHub, replace these with your actual URLs
-const PRISM_UPDATE_URL = 'https://charming-lebkuchen-648010.netlify.app/version.json';
-const PRISM_SITE_URL   = 'https://charming-lebkuchen-648010.netlify.app';
+const PRISM_UPDATE_URL = 'https://prismspendtracker.netlify.app/version.json';
+const PRISM_SITE_URL   = 'https://prismspendtracker.netlify.app';
 
 function semverGt(a, b) {
   const pa = String(a).split('.').map(Number);
