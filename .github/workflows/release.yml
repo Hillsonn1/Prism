@@ -39,7 +39,7 @@ jobs:
 
   # ── Build Mac DMGs (x64 + arm64 via cross-compile on macos-13) ──────────────
   build-mac:
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
