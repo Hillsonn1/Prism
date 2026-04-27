@@ -77,6 +77,26 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve tag name
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="v${{ github.event.inputs.version }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Create tag if triggered manually
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+          git tag "${{ steps.tag.outputs.name }}" || true
+          git push origin "${{ steps.tag.outputs.name }}" || true
+
       - name: Download Windows build
         uses: actions/download-artifact@v4
         with:
@@ -92,6 +112,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.tag.outputs.name }}
           files: release-files/*
           generate_release_notes: true
 
