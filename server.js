@@ -191,6 +191,52 @@ function autoCategory(merchant) {
   return null;
 }
 
+// Maps bank-provided category labels to our category system
+const BANK_CATEGORY_MAP = {
+  'food & drink': 'Dining & Restaurants', 'restaurants': 'Dining & Restaurants',
+  'dining': 'Dining & Restaurants', 'fast food': 'Dining & Restaurants',
+  'coffee shops': 'Dining & Restaurants', 'bars': 'Dining & Restaurants',
+  'groceries': 'Groceries', 'grocery stores': 'Groceries',
+  'supermarkets & groceries': 'Groceries', 'supermarkets': 'Groceries',
+  'gas': 'Gas & Fuel', 'gas stations': 'Gas & Fuel',
+  'gas & fuel': 'Gas & Fuel', 'automotive': 'Gas & Fuel',
+  'shopping': 'Shopping', 'online shopping': 'Shopping',
+  'merchandise': 'Shopping', 'clothing': 'Shopping',
+  'electronics': 'Shopping', 'department stores': 'Shopping',
+  'general merchandise': 'Shopping', 'pet supplies': 'Shopping',
+  'sporting goods': 'Shopping', 'toys': 'Shopping',
+  'travel': 'Travel & Transport', 'transportation': 'Travel & Transport',
+  'rideshare': 'Travel & Transport', 'hotels': 'Travel & Transport',
+  'air travel': 'Travel & Transport', 'parking': 'Travel & Transport',
+  'car rental': 'Travel & Transport',
+  'entertainment': 'Entertainment', 'movies & dvds': 'Entertainment',
+  'games': 'Entertainment', 'arts': 'Entertainment',
+  'health & wellness': 'Health & Medical', 'health': 'Health & Medical',
+  'medical': 'Health & Medical', 'gym': 'Health & Medical',
+  'pharmacy': 'Health & Medical', 'doctor': 'Health & Medical',
+  'utilities': 'Utilities & Bills', 'bills & utilities': 'Utilities & Bills',
+  'phone': 'Utilities & Bills', 'internet': 'Utilities & Bills',
+  'insurance': 'Utilities & Bills',
+  'personal care': 'Personal Care', 'hair': 'Personal Care',
+  'spa & massage': 'Personal Care', 'beauty': 'Personal Care',
+  'education': 'Education', 'tuition': 'Education',
+  'home': 'Home & Garden', 'home improvement': 'Home & Garden',
+  'home & garden': 'Home & Garden', 'furniture': 'Home & Garden',
+  'streaming': 'Subscriptions & Streaming', 'subscriptions': 'Subscriptions & Streaming',
+  'music': 'Subscriptions & Streaming', 'software': 'Subscriptions & Streaming',
+  'gifts': 'Gifts & Donations', 'gifts & donations': 'Gifts & Donations',
+  'charity': 'Gifts & Donations', 'donations': 'Gifts & Donations',
+  'business services': 'Business Expenses', 'business': 'Business Expenses',
+  'professional services': 'Business Expenses', 'office supplies': 'Business Expenses',
+  'other': 'Other', 'miscellaneous': 'Other',
+};
+
+function mapBankCategory(raw) {
+  if (!raw) return null;
+  const key = raw.toLowerCase().trim();
+  return BANK_CATEGORY_MAP[key] || null;
+}
+
 function toTitleCase(str) {
   return str
     .toLowerCase()
@@ -262,6 +308,41 @@ const US_STATES = new Set([
   'VA','WA','WV','WI','WY','DC',
 ]);
 
+// City names sorted longest-first so longer names match before shorter subsets
+// (e.g. "SANFRANCISCO" matched before "FRANCISCO")
+const KNOWN_CITIES = [
+  'LONGISLANDCITY','SANFRANCISCO','JACKSONVILLE','INDIANAPOLIS','FORTWORTH',
+  'SANANTONIO','CENTERREACH','ALBUQUERQUE','PORTSMOUTH','SCOTTSDALE',
+  'MINNEAPOLIS','PITTSBURGH','BRENTWOOD','SACRAMENTO','LOUISVILLE',
+  'BIRMINGHAM','HAUPPAUGE','HENDERSON','HUNTINGTON','CINCINNATI',
+  'WASHINGTON','NASHVILLE','CENTERPORT','BRIDGEPORT','CENTERLINE',
+  'FRESHMEADOWS','PROVIDENCE','MILWAUKEE','BALTIMORE','CHARLOTTE',
+  'CAMBRIDGE','CLEVELAND','HEMPSTEAD','HICKSVILLE','COMMACK',
+  'RICHMOND','SMITHTOWN','WESTBURY','AIRMONT','NANUET','SUFFERN',
+  'PORTLAND','CHANDLER','MEMPHIS','ORLANDO','PHOENIX','HOUSTON','SEATTLE',
+  'HARTFORD','STAMFORD','WATERBURY','GREENWICH','NORWALK','RALEIGH',
+  'MINEOLA','PATCHOGUE','BAYSHORE','BABYLON','MANHASSET','MEADOWS',
+  'SYOSSET','ROSLYN','ASTORIA','BAYSIDE','CORONA','ELMHURST','JACKSON',
+  'FLUSHING','JAMAICA','YONKERS','BROOKLYN','HOBOKEN','NEWARK','TRENTON',
+  'RIDGEWOOD','SUNNYSIDE','WOODSIDE','MASPETH','QUEENS','BRONX','FRESH',
+  'BOSTON','CHICAGO','DALLAS','DENVER','ATLANTA','MIAMI','TAMPA',
+  'TUCSON','FRESNO','ANAHEIM','GLENDALE','GILBERT','TEMPE','CHANDLER',
+  'LASVEGAS','SANDIEGO','SANJOSE','LOSANGELES','ELPASO','BUFFALO',
+  'OMAHA','WICHITA','TULSA','RENO','BOISE','NORFOLK','AURORA',
+  'COLUMBUS','AUSTIN','PLANO','GARLAND','IRVINE','OXNARD',
+  'WORCESTER','LOWELL','QUINCY','LEXINGTON','NEWTON',
+].sort((a, b) => b.length - a.length);
+
+// Israeli city names (sorted longest-first) — no state code in Israeli bank data
+const ISRAELI_CITIES = [
+  'JUERUSALEM','JERUSALEM','YERUSHALAYIM',
+  'RISHONLEZION','RISHONLEZIYYON','PETAHTIQWA','PETAHTIKVA','PETAHIKVA',
+  'BEERSHEBA','BEERSHEVA','KFARSABA','RAMATGAN','RAMATASHARON',
+  'GIVATAYIM','HERZLIYA','KEISARYA','CAESAREA','NETANYA','ASHDOD',
+  'ASHKELON','EILAT','TIBERIAS','NAZARETH','HAIFA','TELAVIV',
+  'TIQWA','TIQVA','TIKVA','PETAH',
+].sort((a, b) => b.length - a.length);
+
 function quickNormalizeName(merchant) {
   let s = merchant.trim();
 
@@ -270,20 +351,113 @@ function quickNormalizeName(merchant) {
   s = s.replace(/^(SQ|TST|GMF|MC|PY|PYD|WW|SP|APL|IN|DRI|WU|PP|NYX|OTTER|TOAST|CLOVER|D\s*J)\s*\*\s*/i, '');
   s = s.replace(/^(PAYPAL|VENMO|ZELLE|STRIPE|SQUARE)\s*\*\s*/i, '');
 
-  // Phone numbers: "(877)263-9300" or "800-568-7625"
+  // Long embedded reference/phone numbers in last word (e.g. "KEVA1800800199HOL")
+  s = s.replace(/\d{7,}\w{0,4}\s*$/, '');
+  // US phone at end of string, optionally followed by state code ("WEB CHAVER424-242-8371NJ")
+  s = s.replace(/\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}[A-Z]{0,2}\s*$/gi, '');
+  // US phone numbers mid-string (global, with word boundary): "(877)263-9300" or "800-568-7625"
   s = s.replace(/\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b\s*/g, ' ');
+  // International / Israeli phone: "03 5202323" or "5202323tel" or "5202323 tel"
+  s = s.replace(/\s+\d{6,10}\s*(tel|fax|phone)?\s*$/gi, '');
+  s = s.replace(/\s+\d{2,3}\s+\d{6,8}\s*(tel|fax|phone)?\s*$/gi, '');
+  // Trailing 2-digit area code directly concatenated to merchant word ("MECUHEDET03" → "MECUHEDET")
+  // Only when digits follow a letter (not standalone digits like "Route 66" or "Highway 99")
+  s = s.replace(/[A-Za-z]\d{2}\s*$/, m => m[0]);
 
-  // Trailing US state abbreviation — strip BEFORE URL cleanup so URL regex hits end-of-string
-  s = s.replace(/\s+([A-Z]{2})\s*$/, (match, code) =>
-    US_STATES.has(code) ? '' : match
+  // Trailing city + state with spaces (e.g. "Starbucks Flushing NY" or "McDonald's New York NY")
+  // Require 4+ char city words to avoid stripping short abbreviations like "APP NY"
+  s = s.replace(/\s+(?:[A-Z][a-zA-Z'-]{3,14}\s+){0,2}([A-Z]{2})\s*$/, (match, state) =>
+    US_STATES.has(state) ? '' : match
+  );
+
+  // Trailing dates embedded by the bank ("MCDONALD'S 04/15" or "CHEVRON 2024-03-01")
+  s = s.replace(/\s+\d{1,2}\/\d{1,2}\/?\d{0,4}\s*$/, '');
+  s = s.replace(/\s+[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}\s*$/, '');
+
+  // Concatenated city+state glued to merchant word with no space
+  // e.g. "RALPH'S COFFEEMANHASSETNY" → "RALPH'S COFFEE"
+  //      "URBAN PRESSFLUSHINGNY"    → "URBAN PRESS"
+  let _cityWasStripped = false;
+  s = s.replace(/(\S+)$/, lastWord => {
+    const upper = lastWord.toUpperCase();
+    if (upper.length < 7) return lastWord;
+    const state = upper.slice(-2);
+    if (!US_STATES.has(state)) return lastWord;
+    const cityPart = upper.slice(0, -2);
+    for (const city of KNOWN_CITIES) {
+      if (cityPart.endsWith(city)) {
+        _cityWasStripped = true;
+        return lastWord.slice(0, cityPart.length - city.length);
+      }
+      if (cityPart === city) { _cityWasStripped = true; return ''; }
+    }
+    return lastWord;
+  });
+  s = s.trim();
+  if (_cityWasStripped) {
+    // Strip any city-component word that was merged into the last merchant word
+    // e.g. "CARNEFRESH" → "CARNE" when FRESH was the start of "FRESH MEADOWS"
+    s = s.replace(/(\S+)$/, newLast => {
+      const up = newLast.toUpperCase();
+      for (const part of ['FRESHMEADOWS','FRESH','NORTH','SOUTH','EAST','WEST','NEW','OLD','MOUNT','FORT','PORT','LAKE','GREAT','UPPER','LOWER','LITTLE','CENTRAL','GARDENS','HEIGHTS','MEADOWS','HILLS','RIDGE','SHORES','SPRINGS','GROVE','DALE','WOOD','SIDE','VILLE']) {
+        if (up !== part && up.endsWith(part) && up.length > part.length + 2) {
+          return newLast.slice(0, up.length - part.length);
+        }
+      }
+      return newLast;
+    });
+    s = s.trim();
+  }
+  // Strip dangling 1–3 char uppercase remnants left after city stripping (e.g. "NOR")
+  s = s.replace(/\s+[A-Z]{1,3}\s*$/, '').trim() || s;
+  // Strip leftover city-only word at end (e.g. "QUEENS" after stripping "FLUSHING")
+  s = s.replace(/\s+(\S+)\s*$/, (match, lastWord) =>
+    KNOWN_CITIES.includes(lastWord.toUpperCase()) ? '' : match
+  ).trim() || s;
+
+  // --- Israeli bank statements ---
+  // "Tel Aviv" often splits across a word boundary ("MEUHDETtel AVIV") — strip wherever it appears at end
+  s = s.replace(/TEL\s+AVIV[-\w\s]*$/i, '').trim();
+
+  // Israeli cities concatenated to last word (no trailing state code in Israeli bank data)
+  // e.g. "LTDJERUSALEM" → "LTD", "TOREMJERUSALEM" → "TOREM"
+  s = s.replace(/(\S+)$/, lastWord => {
+    const upper = lastWord.toUpperCase();
+    for (const city of ISRAELI_CITIES) {
+      if (upper === city) return '';
+      if (upper.endsWith(city) && upper.length > city.length + 1) {
+        return lastWord.slice(0, -city.length);
+      }
+    }
+    return lastWord;
+  });
+  s = s.trim();
+
+  // Israeli cities as standalone spaced last word ("BRUKLYN BAKERY LTD HAIFA")
+  s = s.replace(/\s+(JERUSALEM|JUERUSALEM|YERUSHALAYIM|HAIFA|NETANYA|ASHDOD|ASHKELON|EILAT|HERZLIYA|KEISARYA|CAESAREA|TIBERIAS|NAZARETH|PETAH\s+TI[QK]VA|PETAH\s+TIQWA|BEER\s+SHEVA|KFAR\s+SABA|RAMAT\s+GAN)\s*$/i, '').trim();
+
+  // Trailing truncated phone numbers ("202-", "03-" etc. at end of string)
+  s = s.replace(/\s*\d{2,}[-\s]+$/, '');
+
+  // State code concatenated directly after a domain extension ("GETSAUCE.COMDE" → "GETSAUCE.COM")
+  s = s.replace(/\.(com|net|org|app|co|io)([A-Z]{2})\s*$/gi, (match, tld, code) =>
+    US_STATES.has(code.toUpperCase()) ? '.' + tld : match
   );
 
   // Strip embedded URLs / help domains
   s = s.replace(/\s+https?:\/\/\S*/gi, '');
-  s = s.replace(/\s+\S*\.(com|net|org|app|co)(\/\S*)?\s*$/gi, '');
+  // Strip URL at end, including optional state code directly concatenated (e.g. "GETSAUCE.COMDE", "24SIX.APPNY")
+  s = s.replace(/\s+\S*\.(com|net|org|app|co|io)(\/\S*)?([A-Z]{2})?\s*$/gi, (match, tld, path, stateCode) =>
+    (!stateCode || US_STATES.has(stateCode.toUpperCase())) ? '' : match
+  );
 
-  // URL-style names: www.merchant.com → merchant
-  s = s.replace(/^www\./i, '').replace(/\.(com|net|org|co)\b/ig, '');
+  // Re-run state strip after URL removal (catches "MERCHANT.COM NY" pattern)
+  s = s.replace(/\s+(?:[A-Z][a-zA-Z'-]{3,14}\s+){0,2}([A-Z]{2})\s*$/, (match, state) =>
+    US_STATES.has(state) ? '' : match
+  );
+
+  // URL-style names: www.merchant.com → merchant, 24six.app → 24six
+  s = s.replace(/^www\./i, '').replace(/\.(com|net|org|co|app|io)\b/ig, '');
 
   // Parenthetical suffixes: "Merchant (City, State)"
   s = s.replace(/\s*\([^)]{0,40}\)\s*$/, '');
@@ -354,7 +528,7 @@ const VALID_CATEGORIES = [
 
 // Payment descriptions — anchored at start OR end of string to avoid false positives
 // Also matches "PYMT" abbreviation (e.g. "CAPITAL ONE AUTOPAY PYMT", "CHASE AUTOPAY PYMT")
-const PAYMENT_RE = /^(payment\b|autopay\b|auto\s+pay\b|online\s+pay(ment)?\b|bill\s+pay(ment)?\b|minimum\s+pay(ment)?\b|ach\s+pay(ment)?\b|mobile\s+pay(ment)?\b|e-?pay(ment)?\b|thank\s+you\s+(for\s+)?(your\s+)?payment|payment\s+(thank\s+you|received|complete)|credit\s+card\s+pay(ment)?|balance\s+transfer)|\b(mobile\s+pay(ment)?|online\s+pay(ment)?|autopay(\s+(pay(ment)?|pymt))?|credit\s+card\s+pay(ment)?|bill\s+pay(ment)?|ach\s+pay(ment)?|pymt)\s*$/i;
+const PAYMENT_RE = /^(payment\b|autopay\b|auto\s+pay\b|online\s+pay(ment)?\b|bill\s+pay(ment)?\b|minimum\s+pay(ment)?\b|ach\s+pay(ment)?\b|mobile\s+pay(ment)?\b|e-?pay(ment)?\b|thank\s+you\s+(for\s+)?(your\s+)?payment|payment\s+(thank\s+you|received|complete)|credit\s+card\s+pay(ment)?|balance\s+transfer)|\b(mobile\s+pay(ment)?|online\s+pay(ment)?|autopay(\s+(pay(ment)?|pymt))?|credit\s+card\s+pay(ment)?|bill\s+pay(ment)?|ach\s+pay(ment)?|pymt)[\s\-.,*]*$/i;
 
 // System prompt is static → cached across all calls (prefix cache)
 const AI_SYSTEM = `You are a credit card transaction categorizer and merchant name normalizer.
@@ -548,6 +722,7 @@ function parseCSV(content) {
   const debitKey = findColumn(headers, ['Debit', 'Debit Amount', 'Withdrawal']);
   const creditKey = findColumn(headers, ['Credit', 'Credit Amount', 'Deposit', 'Payment Amount']);
   const typeKey = findColumn(headers, ['Type', 'Transaction Type']);
+  const categoryKey = findColumn(headers, ['Category', 'Transaction Category', 'Merchant Category', 'Spending Category', 'Expense Category']);
 
   if (!dateKey || !descKey) {
     throw new Error(
@@ -588,7 +763,7 @@ function parseCSV(content) {
 
     if (amount === null || amount === 0) continue;
 
-    transactions.push({ date, merchant, amount: parseFloat(amount.toFixed(2)) });
+    transactions.push({ date, merchant, amount: parseFloat(amount.toFixed(2)), csvCategory: categoryKey ? (r[categoryKey] || '').trim() : null });
   }
 
   // Chase-style CSVs store charges as negative numbers.
@@ -640,13 +815,21 @@ async function parsePDF(buffer) {
       const m = line.match(pattern);
       if (m) {
         const date = normalizeDate(m[1]);
-        // Strip a leading posting date that Capital One includes before the merchant name
-        const merchant = m[2].trim()
-          .replace(/^[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}\s+/i, '')  // "Jan 16, 2024 "
-          .replace(/^[A-Za-z]{3,9}\.?\s+\d{1,2}\s+/i, '')              // "Jan 16 "
-          .replace(/^\d{1,2}\/\d{1,2}\/\d{2,4}\s+/, '')                // "01/16/2024 "
-          .replace(/^\d{1,2}\/\d{1,2}\s+/, '')                          // "01/16 "
-          .trim();
+        // Strip leading posting dates (some banks include two dates before the merchant)
+        // and trailing dates/locations. Loop handles multiple leading dates.
+        let merchant = m[2].trim();
+        let _prev;
+        do {
+          _prev = merchant;
+          merchant = merchant
+            .replace(/^[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}\s+/i, '')
+            .replace(/^[A-Za-z]{3,9}\.?\s+\d{1,2}\s+/i, '')
+            .replace(/^\d{1,2}\/\d{1,2}\/\d{2,4}\s+/, '')
+            .replace(/^\d{1,2}\/\d{1,2}\s+/, '')
+            .replace(/\s+\d{1,2}\/\d{1,2}\/?\d{0,4}\s*$/, '')
+            .replace(/\s+[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}\s*$/, '')
+            .trim();
+        } while (merchant !== _prev && merchant.length > 0);
         const amount = parseFloat(m[3].replace(/,/g, ''));
         if (date && merchant && !isNaN(amount) && amount > 0) {
           transactions.push({ date, merchant, amount: parseFloat(amount.toFixed(2)) });
@@ -731,6 +914,8 @@ app.get('/api/upload/stream/:id', async (req, res) => {
 
     for (const t of rawTransactions) {
       const rawMerchant = t.merchant;
+      // Filter out payment/transfer transactions (PDFs don't pre-filter like parseCSV)
+      if (PAYMENT_RE.test(rawMerchant.replace(/[\s\-.,*]+$/, ''))) continue;
       const quickName = quickNormalizeName(rawMerchant);
       const keyRaw  = `${t.date}|${rawMerchant}|${t.amount}`;
       const keyNorm = `${t.date}|${quickName}|${t.amount}`;
@@ -741,6 +926,10 @@ app.get('/api/upload/stream/:id', async (req, res) => {
       let category = merchants[quickName] || merchants[rawMerchant] || null;
       if (!category) {
         category = autoCategory(rawMerchant);
+        if (category) merchants[quickName] = category;
+      }
+      if (!category && t.csvCategory) {
+        category = mapBankCategory(t.csvCategory);
         if (category) merchants[quickName] = category;
       }
       if (!category) unknownMerchants.set(rawMerchant, quickName);

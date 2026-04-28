@@ -42,7 +42,7 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  process.env.ELECTRON_USER_DATA = app.getPath('userData');
+  if (!process.env.ELECTRON_USER_DATA) process.env.ELECTRON_USER_DATA = app.getPath('userData');
   require('../server');
 
   try {
