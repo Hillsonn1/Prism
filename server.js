@@ -333,15 +333,37 @@ const KNOWN_CITIES = [
   'WORCESTER','LOWELL','QUINCY','LEXINGTON','NEWTON',
 ].sort((a, b) => b.length - a.length);
 
-// Israeli city names (sorted longest-first) — no state code in Israeli bank data
+// Israeli city names (sorted longest-first) — no state code in Israeli bank data.
+// Includes full compound names AND the standalone second-parts of two-word cities
+// so that split cases like "YESHRISHON LEZION" are caught (last word = second-part).
 const ISRAELI_CITIES = [
-  'JUERUSALEM','JERUSALEM','YERUSHALAYIM',
-  'RISHONLEZION','RISHONLEZIYYON','PETAHTIQWA','PETAHTIKVA','PETAHIKVA',
-  'BEERSHEBA','BEERSHEVA','KFARSABA','RAMATGAN','RAMATASHARON',
-  'GIVATAYIM','HERZLIYA','KEISARYA','CAESAREA','NETANYA','ASHDOD',
-  'ASHKELON','EILAT','TIBERIAS','NAZARETH','HAIFA','TELAVIV',
-  'TIQWA','TIQVA','TIKVA','PETAH',
+  // Full compound city names
+  'RISHONLEZIYYON','RISHONLEZION','JUERUSALEM','YERUSHALAYIM',
+  'PETAHTIQWA','PETAHTIKVA','PETAHIKVA',
+  'KIRYATMOTZKIN','KIRYATBIALIK','KIRYATSHMONA','KIRYATGAT','KIRYATATA',
+  'RAMATASHARON','MAALEADUMIM','ROSHHAAYIN','ROSHAAYIN','BNEIBRAK',
+  'ORYEHUDA','GIVATSHMUIL','BEERSHEBA','BEERSHEVA','KFARSABA','RAMATGAN',
+  'GIVATAYIM','HERZLIYA','KEISARYA','CAESAREA','TIBERIAS','NAZARETH',
+  'ASHKELON','REHOVOT','NAHARIYA','RAANANA','KARMIEL','HADERA','BATYAM',
+  'NETANYA','ASHDOD','TELAVIV','JERUSALEM','HOLON','RAMLA','EILAT','AKKO',
+  'HAIFA','PETAH','TIKVA','TIQVA','TIQWA',
+  // Second-parts of two-word cities (standalone last-word detection).
+  // When one of these appears as the final word, the matching first-part was
+  // merged into the preceding merchant word (see ISRAELI_CITY_SECOND_PARTS below).
+  'LEZIYYON','LEZION','SHEMESH',
 ].sort((a, b) => b.length - a.length);
+
+// Maps each "second word" of a two-word Israeli city to its possible "first words".
+// Used for the secondary cleanup pass when the second word is stripped as a standalone
+// last word (e.g. "YESHRISHON LEZION" → strip "LEZION" → strip "RISHON" from "YESHRISHON").
+const ISRAELI_CITY_SECOND_PARTS = new Map([
+  ['LEZION',   ['RISHON']],
+  ['LEZIYYON', ['RISHON']],
+  ['SHEMESH',  ['BET', 'BEIT']],
+  ['TIKVA',    ['PETAH']],
+  ['TIQVA',    ['PETAH']],
+  ['TIQWA',    ['PETAH']],
+]);
 
 function quickNormalizeName(merchant) {
   let s = merchant.trim();
@@ -350,11 +372,17 @@ function quickNormalizeName(merchant) {
   s = s.replace(/^APLPAY\s+/i, '');
   s = s.replace(/^(SQ|TST|GMF|MC|PY|PYD|WW|SP|APL|IN|DRI|WU|PP|NYX|OTTER|TOAST|CLOVER|D\s*J)\s*\*\s*/i, '');
   s = s.replace(/^(PAYPAL|VENMO|ZELLE|STRIPE|SQUARE)\s*\*\s*/i, '');
+  // Repeated-brand prefix: "Google *Google One" → "Google One", "Ebay *Ebay Checkout" → "Ebay Checkout"
+  s = s.replace(/^(\w+)\s+\*\1\b\s*/i, '$1 ').trim();
 
   // Long embedded reference/phone numbers in last word (e.g. "KEVA1800800199HOL")
   s = s.replace(/\d{7,}\w{0,4}\s*$/, '');
-  // US phone at end of string, optionally followed by state code ("WEB CHAVER424-242-8371NJ")
-  s = s.replace(/\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}[A-Z]{0,2}\s*$/gi, '');
+  // US phone at end of string, with optional lowercase/uppercase state code and trailing noise
+  // ("WEB CHAVER424-242-8371NJ", "GOOGLE ONE855-836-3987ca -")
+  s = s.replace(/\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}[A-Za-z]{0,2}[\s\-.,*]*$/gi, '');
+  // Phone directly concatenated to a word with no preceding space ("One855-836-3987ca -")
+  // Replace starting from the letter that precedes the digits so the word prefix is kept.
+  s = s.replace(/([A-Za-z])\d{3}[-.\s]?\d{3}[-.\s]?\d{4}[A-Za-z]{0,2}[\s\-.,*]*$/, '$1');
   // US phone numbers mid-string (global, with word boundary): "(877)263-9300" or "800-568-7625"
   s = s.replace(/\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b\s*/g, ' ');
   // International / Israeli phone: "03 5202323" or "5202323tel" or "5202323 tel"
@@ -363,6 +391,11 @@ function quickNormalizeName(merchant) {
   // Trailing 2-digit area code directly concatenated to merchant word ("MECUHEDET03" → "MECUHEDET")
   // Only when digits follow a letter (not standalone digits like "Route 66" or "Highway 99")
   s = s.replace(/[A-Za-z]\d{2}\s*$/, m => m[0]);
+  // Multi-segment reference/transaction codes: "C 18-13827-63987" or "O*25-14041-09950"
+  // Replace with a space so adjacent words don't accidentally merge.
+  s = s.replace(/\s+[A-Z]\s*\*?\s*\d{2,}(?:-\d{3,}){2,}\b/gi, ' ');
+  // Standalone multi-segment numbers without a letter prefix
+  s = s.replace(/\s+\d{2,}(?:-\d{3,}){2,}\b/g, '');
 
   // Trailing city + state with spaces (e.g. "Starbucks Flushing NY" or "McDonald's New York NY")
   // Require 4+ char city words to avoid stripping short abbreviations like "APP NY"
@@ -394,6 +427,30 @@ function quickNormalizeName(merchant) {
     return lastWord;
   });
   s = s.trim();
+
+  // Two-word US city split: "san Joseca" → prevWord="san", cityPart="JOSE", state="CA"
+  // The city's first word was left as a standalone preceding word because only the
+  // second word+state was concatenated (e.g. "Ebay san Joseca" after ref stripping).
+  if (!_cityWasStripped) {
+    s = s.replace(/(\S+)\s+(\S+)$/, (match, prevWord, lastWord) => {
+      const up = lastWord.toUpperCase();
+      if (up.length < 3) return match;
+      const state = up.slice(-2);
+      if (!US_STATES.has(state)) return match;
+      const cityPart = up.slice(0, -2);
+      if (!cityPart) return match;
+      // Combine the preceding word (letters only) with the city part and check KNOWN_CITIES
+      const combined = prevWord.toUpperCase().replace(/[^A-Z]/g, '') + cityPart;
+      for (const city of KNOWN_CITIES) {
+        if (combined === city || (combined.length > city.length && combined.endsWith(city))) {
+          _cityWasStripped = true;
+          return '';
+        }
+      }
+      return match;
+    });
+    s = s.trim();
+  }
   if (_cityWasStripped) {
     // Strip any city-component word that was merged into the last merchant word
     // e.g. "CARNEFRESH" → "CARNE" when FRESH was the start of "FRESH MEADOWS"
@@ -408,33 +465,65 @@ function quickNormalizeName(merchant) {
     });
     s = s.trim();
   }
-  // Strip dangling 1–3 char uppercase remnants left after city stripping (e.g. "NOR")
-  s = s.replace(/\s+[A-Z]{1,3}\s*$/, '').trim() || s;
+  // Only strip dangling 1–3 char uppercase tokens if city stripping already ran — prevents
+  // false positives on legitimate short words like "ONE", "PRO", "MAX" in product names.
+  if (_cityWasStripped) {
+    s = s.replace(/\s+[A-Z]{1,3}\s*$/, '').trim() || s;
+  }
   // Strip leftover city-only word at end (e.g. "QUEENS" after stripping "FLUSHING")
   s = s.replace(/\s+(\S+)\s*$/, (match, lastWord) =>
     KNOWN_CITIES.includes(lastWord.toUpperCase()) ? '' : match
   ).trim() || s;
 
   // --- Israeli bank statements ---
-  // "Tel Aviv" often splits across a word boundary ("MEUHDETtel AVIV") — strip wherever it appears at end
-  s = s.replace(/TEL\s+AVIV[-\w\s]*$/i, '').trim();
+  // "Tel Aviv" with space OR hyphen ("Placetel-Aviv", "MEUHDETtel AVIV") — strip from where TEL begins
+  s = s.replace(/TEL[-\s]+AVIV[-\w\s]*$/i, '').trim();
 
   // Israeli cities concatenated to last word (no trailing state code in Israeli bank data)
-  // e.g. "LTDJERUSALEM" → "LTD", "TOREMJERUSALEM" → "TOREM"
+  // e.g. "LTDJERUSALEM" → "LTD", "TOREMJERUSALEM" → "TOREM", "PLACETEL-AVIV" → "PLACE"
+  // Hyphens inside the last word are normalized away before matching (handles "tel-Aviv").
+  let _israeliSecondPart = null;
   s = s.replace(/(\S+)$/, lastWord => {
     const upper = lastWord.toUpperCase();
+    const norm = upper.replace(/-/g, ''); // "PLACETEL-AVIV" → "PLACETELAVIV"
     for (const city of ISRAELI_CITIES) {
-      if (upper === city) return '';
-      if (upper.endsWith(city) && upper.length > city.length + 1) {
-        return lastWord.slice(0, -city.length);
+      if (norm === city) {
+        _israeliSecondPart = city;
+        return '';
+      }
+      if (norm.endsWith(city) && norm.length > city.length + 1) {
+        _israeliSecondPart = city;
+        // Map the normalized cut-point back to the original string (hyphens skipped)
+        const keep = norm.length - city.length;
+        let n = 0, i = 0;
+        while (i < upper.length && n < keep) { if (upper[i] !== '-') n++; i++; }
+        return lastWord.slice(0, i);
       }
     }
     return lastWord;
   });
   s = s.trim();
 
+  // If a two-word city's second part was stripped as the standalone last word, the
+  // matching first part was merged into the preceding merchant word — strip it too.
+  // e.g. "YESHRISHON" after stripping "LEZION" → strip "RISHON" → "YESH"
+  //      "BAKERBET"   after stripping "SHEMESH" → strip "BET"   → "BAKER"
+  if (_israeliSecondPart && ISRAELI_CITY_SECOND_PARTS.has(_israeliSecondPart)) {
+    const firstParts = ISRAELI_CITY_SECOND_PARTS.get(_israeliSecondPart);
+    s = s.replace(/(\S+)$/, newLast => {
+      const up = newLast.toUpperCase();
+      for (const fp of firstParts) {
+        if (up === fp) return '';
+        if (up.endsWith(fp) && up.length > fp.length) return newLast.slice(0, up.length - fp.length);
+      }
+      return newLast;
+    });
+    s = s.trim();
+  }
+
   // Israeli cities as standalone spaced last word ("BRUKLYN BAKERY LTD HAIFA")
-  s = s.replace(/\s+(JERUSALEM|JUERUSALEM|YERUSHALAYIM|HAIFA|NETANYA|ASHDOD|ASHKELON|EILAT|HERZLIYA|KEISARYA|CAESAREA|TIBERIAS|NAZARETH|PETAH\s+TI[QK]VA|PETAH\s+TIQWA|BEER\s+SHEVA|KFAR\s+SABA|RAMAT\s+GAN)\s*$/i, '').trim();
+  // Also handles spaced two-word city names at end ("RISHON LE ZION", "BET SHEMESH", etc.)
+  s = s.replace(/\s+(JERUSALEM|JUERUSALEM|YERUSHALAYIM|HAIFA|NETANYA|ASHDOD|ASHKELON|EILAT|HERZLIYA|KEISARYA|CAESAREA|TIBERIAS|NAZARETH|HOLON|BATYAM|REHOVOT|RAANANA|NAHARIYA|HADERA|AKKO|KARMIEL|BNEIBRAK|GIVATAYIM|PETAH\s+TI[QK]VA|PETAH\s+TIQWA|BEER\s+SHEV[AH]|KFAR\s+SABA|RAMAT\s+GAN|RAMAT\s+HASHARON|BE[IT]+\s+SHEMESH|RISHON\s+LE[-\s]?ZIYYON|RISHON\s+LE[-\s]?ZION|TEL\s+AVIV)\s*$/i, '').trim();
 
   // Trailing truncated phone numbers ("202-", "03-" etc. at end of string)
   s = s.replace(/\s*\d{2,}[-\s]+$/, '');
@@ -457,13 +546,15 @@ function quickNormalizeName(merchant) {
   );
 
   // URL-style names: www.merchant.com → merchant, 24six.app → 24six
-  s = s.replace(/^www\./i, '').replace(/\.(com|net|org|co|app|io)\b/ig, '');
+  // Use \S* (not \b) so "24six.appwww.24six" → "24six" (consumes everything after the TLD)
+  s = s.replace(/^www\./i, '').replace(/\.(com|net|org|co|app|io)\S*/gi, '');
 
   // Parenthetical suffixes: "Merchant (City, State)"
   s = s.replace(/\s*\([^)]{0,40}\)\s*$/, '');
 
-  // Legal suffixes
+  // Legal suffixes — spaced (word boundary) and concatenated (e.g. "YESHLTD" after city strip)
   s = s.replace(/\s*,?\s*\b(LLC|INC\.?|CORP\.?|LTD\.?|CO\.|PLC|PLLC|L\.L\.C\.?)\s*$/i, '');
+  s = s.replace(/(.{2,}?)(LTD|LLC|INC|CORP|PLLC|PLC)\.?\s*$/i, '$1').trim();
 
   // Store / location numbers: #1234, St1234, or trailing standalone digits
   s = s.replace(/\s+#\d[\d\-]*(\s.*)?$/, '');
