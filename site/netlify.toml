@@ -6,3 +6,13 @@
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
     Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/apple-touch-icon.png"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/apple-touch-icon-precomposed.png"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
