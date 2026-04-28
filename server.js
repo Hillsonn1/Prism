@@ -341,7 +341,11 @@ const ISRAELI_CITIES = [
   'RISHONLEZIYYON','RISHONLEZION','JUERUSALEM','YERUSHALAYIM',
   'PETAHTIQWA','PETAHTIKVA','PETAHIKVA',
   'KIRYATMOTZKIN','KIRYATBIALIK','KIRYATSHMONA','KIRYATGAT','KIRYATATA',
-  'RAMATASHARON','MAALEADUMIM','ROSHHAAYIN','ROSHAAYIN','BNEIBRAK',
+  'RAMATASHARON','MAALEADUMIM','ROSHHAAYIN','ROSHAAYIN',
+  // Bnei Brak — full concat forms covering BNI/BNEI/BNEY/BNAI × BRAK/BRAQ/BARAQ
+  'BNEIBRAK','BNEYBRAK','BNAIBRAK','BNIBRAK',
+  'BNEIBRAQ','BNEYBRAQ','BNAIBRAQ','BNIBRAQ',
+  'BNEIBARAQ','BNEYBARAQ','BNAIBARAQ','BNIBARAQ',
   'ORYEHUDA','GIVATSHMUIL','BEERSHEBA','BEERSHEVA','KFARSABA','RAMATGAN',
   'GIVATAYIM','HERZLIYA','KEISARYA','CAESAREA','TIBERIAS','NAZARETH',
   'ASHKELON','REHOVOT','NAHARIYA','RAANANA','KARMIEL','HADERA','BATYAM',
@@ -351,6 +355,8 @@ const ISRAELI_CITIES = [
   // When one of these appears as the final word, the matching first-part was
   // merged into the preceding merchant word (see ISRAELI_CITY_SECOND_PARTS below).
   'LEZIYYON','LEZION','SHEMESH',
+  // Bnei Brak second-parts (BRAK/BRAQ/BARAQ — not BREAK, which is an English word)
+  'BARAQ','BRAK','BRAQ',
 ].sort((a, b) => b.length - a.length);
 
 // Maps each "second word" of a two-word Israeli city to its possible "first words".
@@ -363,6 +369,10 @@ const ISRAELI_CITY_SECOND_PARTS = new Map([
   ['TIKVA',    ['PETAH']],
   ['TIQVA',    ['PETAH']],
   ['TIQWA',    ['PETAH']],
+  // Bnei Brak — first-parts for BRAK/BRAQ/BARAQ second-words
+  ['BRAK',     ['BNEI', 'BNEY', 'BNAI', 'BNI']],
+  ['BRAQ',     ['BNEI', 'BNEY', 'BNAI', 'BNI']],
+  ['BARAQ',    ['BNEI', 'BNEY', 'BNAI', 'BNI']],
 ]);
 
 function quickNormalizeName(merchant) {
@@ -521,9 +531,16 @@ function quickNormalizeName(merchant) {
     s = s.trim();
   }
 
+  // Bnei Brak where the second word is "BREAK" (a bank transliteration of ברק).
+  // "BREAK" is too common an English word to add to ISRAELI_CITIES, so we handle it
+  // with a targeted regex that fires ONLY when the preceding word ends with a BN-prefix.
+  // Pattern: any word ending in BNI/BNEI/BNEY/BNAI followed by any BRAK/BRAQ/BARAQ/BREAK variant.
+  // "Coffee Break" is safe — "COFFEE" doesn't end with BN[AIEY]+.
+  s = s.replace(/\s+\S*BN[AIEY]+\s+B[A]?R[AEOQ]*[KQ]?\s*$/i, '').trim();
+
   // Israeli cities as standalone spaced last word ("BRUKLYN BAKERY LTD HAIFA")
   // Also handles spaced two-word city names at end ("RISHON LE ZION", "BET SHEMESH", etc.)
-  s = s.replace(/\s+(JERUSALEM|JUERUSALEM|YERUSHALAYIM|HAIFA|NETANYA|ASHDOD|ASHKELON|EILAT|HERZLIYA|KEISARYA|CAESAREA|TIBERIAS|NAZARETH|HOLON|BATYAM|REHOVOT|RAANANA|NAHARIYA|HADERA|AKKO|KARMIEL|BNEIBRAK|GIVATAYIM|PETAH\s+TI[QK]VA|PETAH\s+TIQWA|BEER\s+SHEV[AH]|KFAR\s+SABA|RAMAT\s+GAN|RAMAT\s+HASHARON|BE[IT]+\s+SHEMESH|RISHON\s+LE[-\s]?ZIYYON|RISHON\s+LE[-\s]?ZION|TEL\s+AVIV)\s*$/i, '').trim();
+  s = s.replace(/\s+(JERUSALEM|JUERUSALEM|YERUSHALAYIM|HAIFA|NETANYA|ASHDOD|ASHKELON|EILAT|HERZLIYA|KEISARYA|CAESAREA|TIBERIAS|NAZARETH|HOLON|BATYAM|REHOVOT|RAANANA|NAHARIYA|HADERA|AKKO|KARMIEL|GIVATAYIM|PETAH\s+TI[QK]VA|PETAH\s+TIQWA|BEER\s+SHEV[AH]|KFAR\s+SABA|RAMAT\s+GAN|RAMAT\s+HASHARON|BE[IT]+\s+SHEMESH|RISHON\s+LE[-\s]?ZIYYON|RISHON\s+LE[-\s]?ZION|TEL\s+AVIV|BN[AIEY]+\s+B[A]?R[AEOQ]*[KQ]?)\s*$/i, '').trim();
 
   // Trailing truncated phone numbers ("202-", "03-" etc. at end of string)
   s = s.replace(/\s*\d{2,}[-\s]+$/, '');
