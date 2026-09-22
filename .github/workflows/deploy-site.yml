@@ -14,10 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Keep version.json in step with package.json so a site-only push can
-      # never roll the advertised version back behind the latest release.
-      - name: Write version.json
-        run: node scripts/write-version.js
+      # A site-only deploy advertises the newest *published* release, so it can
+      # neither roll the version back nor announce one that isn't built yet.
+      - name: Write version.json from the latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/write-version.js "$(gh release view --json tagName --jq .tagName)"
 
       - name: Install Netlify CLI
         run: npm install -g netlify-cli
