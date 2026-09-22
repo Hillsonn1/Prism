@@ -5,19 +5,24 @@ function renderMerchants() {
   const search = (document.getElementById('merchant-search')?.value || '').toLowerCase();
   const filtered = search ? entries.filter(([m]) => m.toLowerCase().includes(search)) : entries;
   const txnCounts = {};
-  for (const t of state.transactions) txnCounts[t.merchant] = (txnCounts[t.merchant] || 0) + 1;
+  const totals = {};
+  for (const t of state.transactions) {
+    txnCounts[t.merchant] = (txnCounts[t.merchant] || 0) + 1;
+    totals[t.merchant] = (totals[t.merchant] || 0) + t.amount;
+  }
 
   const { col, dir } = state.merchantSort;
   filtered.sort((a, b) => {
     let av, bv;
     if (col === 'name') { av = a[0].toLowerCase(); bv = b[0].toLowerCase(); }
     else if (col === 'category') { av = (a[1] || '').toLowerCase(); bv = (b[1] || '').toLowerCase(); }
+    else if (col === 'total') { av = totals[a[0]] || 0; bv = totals[b[0]] || 0; }
     else { av = txnCounts[a[0]] || 0; bv = txnCounts[b[0]] || 0; }
     if (av < bv) return dir === 'asc' ? -1 : 1;
     if (av > bv) return dir === 'asc' ? 1 : -1;
     return 0;
   });
-  for (const c of ['name', 'category', 'count']) {
+  for (const c of ['name', 'category', 'count', 'total']) {
     const el = document.getElementById(`msort-${c}`);
     if (!el) continue;
     el.textContent = col === c ? (dir === 'asc' ? ' ↑' : ' ↓') : ' ↕';
@@ -36,17 +41,16 @@ function renderMerchants() {
   }
   empty.style.display = 'none';
   table.style.display = '';
-  document.getElementById('merchants-body').innerHTML = html`${filtered.map(([merchant, category], idx) => html`
+  document.getElementById('merchants-body').innerHTML = html`${filtered.map(([merchant, category]) => html`
     <tr>
-      <td>${merchant}${txnCounts[merchant] ? html` <span class="merchant-count">${txnCounts[merchant]}</span>` : ''}</td>
-      <td>${categoryBadge(category)}</td>
+      <td><span class="merchant-link" onclick="jumpToMerchant('${escAttr(merchant)}')" title="See transactions">${merchant}</span></td>
+      <td>${categoryBadge(category, `openCategoryPopupForMerchant(event,'${escAttr(merchant)}')`)}</td>
       <td>${txnCounts[merchant] || 0}</td>
+      <td><span class="amount">${fmt(totals[merchant] || 0)}</span></td>
       <td>
-        <div class="row-actions-wide">
-          <button class="btn btn-sm btn-secondary" onclick="showMerchantChart('${escAttr(merchant)}')" title="View spend history" aria-label="Spend history">📈</button>
-          <select id="medit-${idx}" class="merchant-edit-select" aria-label="Category">${categoryOptions(category, { custom: false })}</select>
-          <button class="btn btn-sm btn-secondary" onclick="saveMerchantEdit('${escAttr(merchant)}', ${idx})">Save</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteMerchant('${escAttr(merchant)}')">Forget</button>
+        <div class="row-actions">
+          <button class="icon-btn" onclick="showMerchantChart('${escAttr(merchant)}')" title="Spending over time" aria-label="Spending over time">${icon('chart')}</button>
+          <button class="icon-btn icon-btn-danger" onclick="deleteMerchant('${escAttr(merchant)}')" title="Forget this merchant" aria-label="Forget this merchant">${icon('trash')}</button>
         </div>
       </td>
     </tr>`)}`;
@@ -57,7 +61,7 @@ document.querySelectorAll('.m-sortable').forEach(th => {
   th.addEventListener('click', () => {
     const col = th.dataset.col;
     if (state.merchantSort.col === col) state.merchantSort.dir = state.merchantSort.dir === 'asc' ? 'desc' : 'asc';
-    else { state.merchantSort.col = col; state.merchantSort.dir = col === 'count' ? 'desc' : 'asc'; }
+    else { state.merchantSort.col = col; state.merchantSort.dir = col === 'count' || col === 'total' ? 'desc' : 'asc'; }
     renderMerchants();
   });
 });
@@ -89,19 +93,6 @@ function closeMerchantChart() {
   const overlay = document.getElementById('merchant-chart-overlay');
   overlay.classList.add('closing');
   setTimeout(() => { overlay.style.display = 'none'; overlay.classList.remove('closing'); }, 200);
-}
-
-async function saveMerchantEdit(merchant, key) {
-  const cat = document.getElementById(`medit-${key}`)?.value;
-  if (!cat) return;
-  try {
-    await api('POST', '/api/merchants', { merchant, category: cat });
-    await loadAll();
-    renderMerchants();
-    showToast('Merchant updated', 'success');
-  } catch (err) {
-    showToast('Could not update: ' + err.message, 'error');
-  }
 }
 
 async function deleteMerchant(merchant) {

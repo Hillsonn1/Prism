@@ -1,5 +1,7 @@
 // Startup.
 
+mountIcons();
+
 (async () => {
   try {
     await loadAll();

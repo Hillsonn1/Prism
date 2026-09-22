@@ -31,10 +31,10 @@ function getSorted(rows) {
 function rowActions(t, { stop = false } = {}) {
   const pre = stop ? 'event.stopPropagation();' : '';
   const identify = (!t.category || t.category === 'Unknown') && state.hasApiKey
-    ? html`<button class="identify-btn" id="identify-btn-${t.id}" onclick="${raw(pre)}identifyMerchant('${t.id}')" title="Identify with AI" aria-label="Identify merchant with AI">🔍</button>` : '';
+    ? html`<button class="icon-btn icon-btn-ai" id="identify-btn-${t.id}" onclick="${raw(pre)}identifyMerchant('${t.id}')" title="Identify with AI" aria-label="Identify merchant with AI">${icon('sparkle')}</button>` : '';
   return html`<div class="row-actions">${identify}
-    <button class="edit-btn" onclick="${raw(pre)}openEditModal('${t.id}')" title="Edit" aria-label="Edit transaction">✏</button>
-    <button class="delete-btn" onclick="${raw(pre)}deleteTransactionById('${t.id}')" title="Delete" aria-label="Delete transaction">🗑</button>
+    <button class="icon-btn" onclick="${raw(pre)}openEditModal('${t.id}')" title="Edit" aria-label="Edit transaction">${icon('pencil')}</button>
+    <button class="icon-btn icon-btn-danger" onclick="${raw(pre)}deleteTransactionById('${t.id}')" title="Delete" aria-label="Delete transaction">${icon('trash')}</button>
   </div>`;
 }
 
@@ -55,6 +55,9 @@ function renderTransactions() {
   }
 
   const filtered = getSorted(getFiltered());
+  const anyFilter = ['filter-category', 'filter-merchant', 'filter-card', 'filter-month', 'filter-date-from', 'filter-date-to'].some(id => document.getElementById(id)?.value);
+  const clearBtn = document.getElementById('filter-clear');
+  if (clearBtn) clearBtn.style.visibility = anyFilter ? 'visible' : 'hidden';
   const tbody = document.getElementById('transactions-body');
   const empty = document.getElementById('transactions-empty');
   const table = document.getElementById('transactions-table');
@@ -64,7 +67,7 @@ function renderTransactions() {
 
   const groupBtn = document.getElementById('group-toggle');
   if (groupBtn) {
-    groupBtn.textContent = state.groupByVendor ? 'Show individual' : 'Group by vendor';
+    groupBtn.textContent = state.groupByVendor ? 'Show individually' : 'Group by merchant';
     groupBtn.classList.toggle('btn-active', state.groupByVendor);
   }
 
@@ -97,9 +100,9 @@ function renderTransactions() {
           <td>${categoryBadge(g.category, `event.stopPropagation();openCategoryPopupForMerchant(event,'${escAttr(g.merchant)}')`)}</td>
           <td>
             <div class="row-actions">
-              ${(!g.category || g.category === 'Unknown') && state.hasApiKey ? html`<button class="identify-btn" id="identify-btn-${g.txns[0].id}" onclick="event.stopPropagation();identifyMerchant('${g.txns[0].id}')" title="Identify with AI" aria-label="Identify merchant with AI">🔍</button>` : ''}
-              <button class="edit-btn" onclick="event.stopPropagation();renameVendorGroup('${escAttr(g.merchant)}')" title="Rename all" aria-label="Rename merchant">✏</button>
-              <button class="delete-btn" onclick="event.stopPropagation();deleteVendorGroup('${escAttr(g.merchant)}',${g.count})" title="Delete all" aria-label="Delete all from merchant">🗑</button>
+              ${(!g.category || g.category === 'Unknown') && state.hasApiKey ? html`<button class="icon-btn icon-btn-ai" id="identify-btn-${g.txns[0].id}" onclick="event.stopPropagation();identifyMerchant('${g.txns[0].id}')" title="Identify with AI" aria-label="Identify merchant with AI">${icon('sparkle')}</button>` : ''}
+              <button class="icon-btn" onclick="event.stopPropagation();renameVendorGroup('${escAttr(g.merchant)}')" title="Rename merchant" aria-label="Rename merchant">${icon('pencil')}</button>
+              <button class="icon-btn icon-btn-danger" onclick="event.stopPropagation();deleteVendorGroup('${escAttr(g.merchant)}',${g.count})" title="Delete all from this merchant" aria-label="Delete all from merchant">${icon('trash')}</button>
             </div>
           </td>
         </tr>`;
@@ -466,7 +469,7 @@ async function identifyMerchant(txnId) {
   const txn = state.transactions.find(t => t.id === txnId);
   if (!txn) return;
   const btn = document.getElementById(`identify-btn-${txnId}`);
-  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '…'; }
   try {
     const data = await api('POST', '/api/identify-merchant', { merchant: txn.merchant, rawMerchant: txn.rawSource || txn.merchant });
     if (data.category) {
@@ -484,7 +487,7 @@ async function identifyMerchant(txnId) {
   } catch (err) {
     showToast('Could not identify merchant: ' + err.message, 'error');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔍'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = icon('sparkle'); }
   }
 }
 

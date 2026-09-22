@@ -1,5 +1,15 @@
 // Dashboard view.
 
+const prevMonthOf = m => { const [y, mo] = m.split('-').map(Number); const d = new Date(y, mo - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
+const spendOf = list => list.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+
+// First visit lands on the current month (or the latest one with data)
+function defaultDashboardMonth(allMonths) {
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  if (allMonths.includes(thisMonth)) return thisMonth;
+  return allMonths[0] || '';
+}
+
 function renderDashboard() {
   const empty = document.getElementById('dashboard-empty');
   const data = document.getElementById('dashboard-data');
@@ -12,75 +22,19 @@ function renderDashboard() {
   data.style.display = '';
 
   const allMonths = [...new Set(state.transactions.map(t => t.date?.slice(0, 7)).filter(Boolean))].sort().reverse();
-  if (state.dashboardMonth && !allMonths.includes(state.dashboardMonth)) state.dashboardMonth = '';
+  if (state.dashboardMonth === undefined || (state.dashboardMonth && !allMonths.includes(state.dashboardMonth))) state.dashboardMonth = defaultDashboardMonth(allMonths);
+  const month = state.dashboardMonth;
   document.getElementById('dashboard-filter-bar').innerHTML = html`
-    <div class="dash-filter-row">
-      <label class="dash-filter-label" for="dash-month-select">Period</label>
-      <select id="dash-month-select" onchange="state.dashboardMonth=this.value;renderDashboard()">
-        <option value="">All time</option>
-        ${allMonths.map(m => html`<option value="${m}" ${m === state.dashboardMonth ? 'selected' : ''}>${fmtMonth(m)}</option>`)}
-      </select>
-    </div>`;
+    <select id="dash-month-select" class="period-select" aria-label="Period" onchange="state.dashboardMonth=this.value;renderDashboard()">
+      ${allMonths.map(m => html`<option value="${m}" ${m === month ? 'selected' : ''}>${fmtMonth(m)}</option>`)}
+      <option value="" ${!month ? 'selected' : ''}>All time</option>
+    </select>`;
 
-  const txns = state.dashboardMonth
-    ? state.transactions.filter(t => t.date?.startsWith(state.dashboardMonth))
-    : state.transactions;
-
-  const total = txns.reduce((s, t) => s + t.amount, 0);
-  const uncategorized = txns.filter(t => !t.category);
-  const uncategorizedMerchants = new Set(uncategorized.map(t => t.merchant)).size;
+  const txns = month ? state.transactions.filter(t => t.date?.startsWith(month)) : state.transactions;
+  const total = spendOf(txns);
   const thisMonth = new Date().toISOString().slice(0, 7);
-  const monthTotal = txns.filter(t => t.date?.startsWith(thisMonth)).reduce((s, t) => s + t.amount, 0);
-
-  document.getElementById('summary-cards').innerHTML = html`
-    <div class="summary-card">
-      <div class="label">${state.dashboardMonth ? 'Period Total' : 'Total Spending'}</div>
-      <div class="value">${fmt(total)}</div>
-      <div class="sub">${plural(txns.length, 'transaction')}</div>
-    </div>
-    ${!state.dashboardMonth ? html`
-    <div class="summary-card">
-      <div class="label">This Month</div>
-      <div class="value">${fmt(monthTotal)}</div>
-      <div class="sub">${new Date().toLocaleString('default', { month: 'long', year: 'numeric' })}</div>
-    </div>` : ''}`;
-
-  const banner = document.getElementById('uncategorized-banner');
-  if (uncategorized.length) {
-    banner.style.display = '';
-    banner.innerHTML = html`⚠️ <strong>${plural(uncategorizedMerchants, 'merchant')}</strong> uncategorized — <a href="#" class="categorize-link" onclick="openUncategorizedModal();return false">Categorize now →</a>`;
-  } else {
-    banner.style.display = 'none';
-  }
-
-  // Monthly trend (always all transactions, highlights the selected month)
-  const monthTotals = {};
-  for (const t of state.transactions) {
-    const m = t.date?.slice(0, 7);
-    if (m) monthTotals[m] = (monthTotals[m] || 0) + t.amount;
-  }
-  const allTrendMonths = Object.keys(monthTotals).sort();
-  const trendMonths = state.trendShowAll ? allTrendMonths : allTrendMonths.slice(-6);
-  const toggle = document.getElementById('trend-toggle');
-  if (toggle) {
-    toggle.textContent = state.trendShowAll ? 'Show recent' : 'Show all';
-    toggle.style.display = allTrendMonths.length > 6 ? '' : 'none';
-  }
-  const trendMax = Math.max(...Object.values(monthTotals), 1);
-  document.getElementById('trend-chart').innerHTML = html`${trendMonths.map(m => {
-    const amt = monthTotals[m];
-    const isSelected = m === state.dashboardMonth;
-    return html`
-      <div class="chart-row chart-clickable ${isSelected ? 'chart-row-selected' : ''}" onclick="state.dashboardMonth='${m}';renderDashboard()" title="${fmtMonth(m)}">
-        <div class="chart-label">${fmtMonth(m, 'short')}</div>
-        <div class="chart-bar-wrap">
-          <div class="chart-bar ${isSelected ? 'chart-bar-selected' : 'chart-bar-muted'}" style="width:0" data-w="${(amt / trendMax * 100).toFixed(1)}%"></div>
-        </div>
-        <div class="chart-amount">${fmt(amt)}</div>
-      </div>`;
-  })}`;
-
-  // Category breakdown, rows drill into the transactions list
+  const isCurrent = month === thisMonth;
+  const uncategorized = txns.filter(t => !t.category);
   const catTotals = {};
   for (const t of txns) {
     if (t.amount <= 0) continue;
@@ -88,35 +42,102 @@ function renderDashboard() {
     catTotals[c] = (catTotals[c] || 0) + t.amount;
   }
   const sorted = Object.entries(catTotals).filter(([, amt]) => amt > 0).sort((a, b) => b[1] - a[1]);
+  const topCat = sorted.find(([c]) => c !== 'Uncategorized');
+
+  // ---- Stat tiles ----
+  const tiles = [];
+  if (month) {
+    const prior = spendOf(state.transactions.filter(t => t.date?.startsWith(prevMonthOf(month))));
+    const delta = prior ? Math.round((total - prior) / prior * 100) : null;
+    const target = state.monthlyBudget;
+    tiles.push({
+      label: isCurrent ? 'Spent so far' : 'Spent',
+      value: fmt(total),
+      sub: delta === null ? plural(txns.length, 'purchase')
+        : html`<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}%</span> vs ${fmtMonth(prevMonthOf(month), 'short')}`,
+      bar: target ? { pct: Math.min(total / target, 1), over: total > target, warn: total / target > 0.85, note: total > target ? `${fmt(total - target)} over the ${fmt(target)} target` : `${fmt(target - total)} left of ${fmt(target)}` } : null,
+    });
+    if (isCurrent) {
+      const day = new Date().getDate();
+      const days = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+      tiles.push({ label: 'On pace for', value: fmt(day ? total / day * days : 0), sub: `Day ${day} of ${days} · ${fmt(total / Math.max(day, 1))} a day` });
+    } else {
+      tiles.push({ label: 'Purchases', value: String(txns.filter(t => t.amount > 0).length), sub: `${fmt(total / new Date(+month.slice(0, 4), +month.slice(5), 0).getDate())} a day` });
+    }
+  } else {
+    const months = allMonths.length;
+    tiles.push({ label: 'Total spent', value: fmt(total), sub: `${plural(months, 'month')} · ${plural(txns.length, 'purchase')}` });
+    tiles.push({ label: 'Monthly average', value: fmt(total / Math.max(months, 1)), sub: 'across all months' });
+  }
+  tiles.push(topCat
+    ? { label: 'Biggest category', value: topCat[0], sub: `${fmt(topCat[1])} · ${Math.round(topCat[1] / total * 100)}%`, small: true, action: `drillCategory('${escAttr(topCat[0])}')`, color: categoryColor(topCat[0]) }
+    : { label: 'Biggest category', value: '—', sub: '' });
+  const uncatMerchants = new Set(uncategorized.map(t => t.merchant)).size;
+  tiles.push(uncategorized.length
+    ? { label: 'Needs a category', value: String(uncategorized.length), sub: html`${plural(uncatMerchants, 'merchant')} · <b>categorize</b>`, action: 'openUncategorizedModal()', attention: true }
+    : { label: 'Categorized', value: '100%', sub: 'everything is sorted', good: true });
+
+  document.getElementById('summary-cards').innerHTML = html`${tiles.map(t => html`
+    <div class="stat-tile ${t.action ? 'stat-clickable' : ''} ${t.attention ? 'stat-attention' : ''} ${t.good ? 'stat-good' : ''}" ${t.action ? raw(`onclick="${t.action}" role="button" tabindex="0"`) : ''}>
+      <div class="stat-label">${t.label}</div>
+      <div class="stat-value ${t.small ? 'stat-value-sm' : ''}" ${t.color ? raw(`style="color:${t.color}"`) : ''}>${t.value}</div>
+      <div class="stat-sub">${t.sub}</div>
+      ${t.bar ? html`<div class="stat-bar"><div class="stat-bar-fill ${t.bar.over ? 'over' : t.bar.warn ? 'warn' : ''}" style="width:${(t.bar.pct * 100).toFixed(1)}%"></div></div><div class="stat-bar-note">${t.bar.note}</div>` : ''}
+    </div>`)}`;
+
+  // ---- Category breakdown ----
+  document.getElementById('category-note').textContent = month ? fmtMonth(month) : 'All time';
   const max = sorted[0]?.[1] || 1;
-  document.getElementById('pie-chart').innerHTML = donutChart({ slices: sorted, total: sorted.reduce((s, [, a]) => s + a, 0), onSliceClick: 'drillCategory' });
+  document.getElementById('pie-chart').innerHTML = donutChart({ slices: sorted, total, onSliceClick: 'drillCategory' });
   document.getElementById('category-chart').innerHTML = html`${sorted.map(([cat, amt]) => {
     const budget = state.budgets[cat];
-    const showBudget = state.dashboardMonth && budget;
+    const showBudget = month && budget;
     const pct = showBudget ? amt / budget : 1;
     let barColor = categoryColor(cat);
     let extra = '';
     if (showBudget) {
-      if (pct > 1) { barColor = 'var(--danger)'; extra = html` <span class="budget-amt">/ ${fmt(budget)} ⚠ over</span>`; }
+      if (pct > 1) { barColor = 'var(--danger)'; extra = html` <span class="budget-amt">/ ${fmt(budget)} over</span>`; }
       else if (pct > .8) { barColor = 'var(--warning)'; extra = html` <span class="budget-amt">/ ${fmt(budget)}</span>`; }
       else extra = html` <span class="budget-amt">/ ${fmt(budget)}</span>`;
     }
     return html`
-      <div class="chart-row chart-clickable" onclick="drillCategory('${escAttr(cat)}')" title="Click to see ${cat} transactions">
+      <div class="chart-row chart-clickable" onclick="drillCategory('${escAttr(cat)}')" title="See ${cat} transactions">
         <div class="chart-label">${cat}</div>
-        <div class="chart-bar-wrap">
-          <div class="chart-bar" style="width:0;background:${barColor}" data-w="${(amt / max * 100).toFixed(1)}%"></div>
-        </div>
+        <div class="chart-bar-wrap"><div class="chart-bar" style="width:0;background:${barColor}" data-w="${(amt / max * 100).toFixed(1)}%"></div></div>
         <div class="chart-amount">${fmt(amt)}${extra}</div>
       </div>`;
   })}`;
 
-  const recent = [...txns].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8);
+  // ---- Month by month (all data, selected month highlighted) ----
+  const monthTotals = {};
+  for (const t of state.transactions) {
+    const m = t.date?.slice(0, 7);
+    if (m && t.amount > 0) monthTotals[m] = (monthTotals[m] || 0) + t.amount;
+  }
+  const allTrendMonths = Object.keys(monthTotals).sort();
+  const trendMonths = state.trendShowAll ? allTrendMonths : allTrendMonths.slice(-6);
+  const toggle = document.getElementById('trend-toggle');
+  if (toggle) {
+    toggle.textContent = state.trendShowAll ? 'Show recent' : `Show all ${allTrendMonths.length}`;
+    toggle.style.display = allTrendMonths.length > 6 ? '' : 'none';
+  }
+  const trendMax = Math.max(...Object.values(monthTotals), 1);
+  document.getElementById('trend-chart').innerHTML = html`${trendMonths.map(m => {
+    const isSelected = m === month;
+    return html`
+      <div class="chart-row chart-clickable ${isSelected ? 'chart-row-selected' : ''}" onclick="state.dashboardMonth='${m}';renderDashboard()" title="${fmtMonth(m)}">
+        <div class="chart-label">${fmtMonth(m, 'short')}</div>
+        <div class="chart-bar-wrap"><div class="chart-bar ${isSelected ? 'chart-bar-selected' : 'chart-bar-muted'}" style="width:0" data-w="${(monthTotals[m] / trendMax * 100).toFixed(1)}%"></div></div>
+        <div class="chart-amount">${fmt(monthTotals[m])}</div>
+      </div>`;
+  })}`;
+
+  const recent = [...txns].sort((a, b) => b.date.localeCompare(a.date) || (b.importedAt || '').localeCompare(a.importedAt || '')).slice(0, 7);
   document.getElementById('recent-transactions').innerHTML = html`${recent.map(t => html`
-    <div class="recent-row">
-      <div>
-        <div class="recent-merchant">${t.merchant}</div>
-        <div class="recent-date">${fmtDate(t.date)}${t.pending ? html` <span class="txn-pending-badge">pending</span>` : ''}</div>
+    <div class="recent-row" onclick="openEditModal('${t.id}')" title="Edit">
+      <div class="recent-main">
+        <div class="recent-merchant">${t.merchant}${t.pending ? html` <span class="txn-pending-badge">pending</span>` : ''}</div>
+        <div class="recent-date">${fmtDate(t.date)}${t.category ? html` · <span style="color:${categoryColor(t.category)}">${t.category}</span>` : html` · <span class="muted">uncategorized</span>`}</div>
       </div>
       <div class="recent-amount">${amountHtml(t, { small: true })}</div>
     </div>`)}`;
@@ -155,10 +176,10 @@ function displayAnomalies(anomalies) {
   const visible = anomalies.filter(a => !state.dismissedAnomalies.has(anomalyKey(a)));
   if (!visible.length) { card.style.display = 'none'; return; }
   card.style.display = '';
-  const typeIcon = { 'duplicate': '⚠️', 'new-merchant': '🆕', 'price-increase': '📈' };
+  const typeIcon = { 'duplicate': 'alert', 'new-merchant': 'tag', 'price-increase': 'trend-up' };
   list.innerHTML = html`${visible.map((a, i) => html`
     <div class="anomaly-row" id="anomaly-row-${i}">
-      <span class="anomaly-icon">${typeIcon[a.type] || '⚠️'}</span>
+      <span class="anomaly-icon">${icon(typeIcon[a.type] || 'alert')}</span>
       <div style="flex:1">
         <span class="anomaly-label">${a.label}</span>
         <span class="anomaly-detail">${a.detail}</span>
@@ -177,10 +198,8 @@ function dismissAnomaly(i, key) {
 
 // ---- Insights: local observations, plus an optional AI write-up ----
 async function renderInsights() {
-  const card = document.getElementById('insights-card');
-  if (!card) return;
-  card.style.display = '';
   const list = document.getElementById('insights-list');
+  if (!list) return;
   const cacheKey = state.dashboardMonth || 'all';
   if (!state.localInsightsCache[cacheKey]) {
     try {
@@ -188,7 +207,8 @@ async function renderInsights() {
       state.localInsightsCache[cacheKey] = (await api('GET', `/api/insights/local${params}`)).insights || [];
     } catch { state.localInsightsCache[cacheKey] = []; }
   }
-  const items = state.localInsightsCache[cacheKey];
+  // The tiles already show totals, pace, the top category and what's uncategorized
+  const items = state.localInsightsCache[cacheKey].filter(i => !['total', 'pace', 'top-category', 'uncategorized'].includes(i.kind)).slice(0, 4);
   const actions = {
     'top-category': i => `drillCategory('${escAttr(i.category)}')`,
     'swing': i => `drillCategory('${escAttr(i.category)}')`,
@@ -196,12 +216,13 @@ async function renderInsights() {
     'uncategorized': () => 'openUncategorizedModal()',
     'total': i => i.month ? `state.dashboardMonth='${i.month}';renderDashboard()` : '',
   };
-  list.innerHTML = items.length
-    ? html`${items.map(i => {
-        const action = actions[i.kind] ? actions[i.kind](i) : '';
-        return html`<li class="insight-row ${action ? 'insight-clickable' : ''}" ${action ? raw(`onclick="${action}"`) : ''}>${i.text}</li>`;
-      })}`
-    : html`<li class="insight-row muted">Nothing to report yet.</li>`;
+  const card = document.getElementById('insights-card');
+  const aiText = state.insightsCache[cacheKey];
+  card.style.display = items.length || state.hasApiKey ? '' : 'none';
+  list.innerHTML = html`${items.map(i => {
+    const action = actions[i.kind] ? actions[i.kind](i) : '';
+    return html`<li class="insight-row ${action ? 'insight-clickable' : ''}" ${action ? raw(`onclick="${action}"`) : ''}>${i.text}</li>`;
+  })}${aiText && aiText !== 'loading' ? html`<li class="insight-row insight-ai"><span class="ai-badge">AI</span> ${aiText}</li>` : ''}`;
   renderAiInsight();
 }
 
@@ -212,12 +233,11 @@ function renderAiInsight() {
   const cached = state.insightsCache[cacheKey];
   if (!state.hasApiKey) { wrap.innerHTML = ''; return; }
   if (cached === 'loading') {
-    wrap.innerHTML = html`<div class="progress-bar-wrap"><div class="progress-bar-fill progress-indeterminate"></div></div><div class="progress-message">Writing a summary…</div>`;
+    wrap.innerHTML = html`<span class="muted" style="font-size:.8rem">Writing…</span>`;
   } else if (cached) {
-    wrap.innerHTML = html`<div class="insights-content">${cached.split(/\n+/).filter(Boolean).map(p => html`<p>${p}</p>`)}</div>
-      <button class="btn-link" onclick="generateInsights(true)">↺ Rewrite</button>`;
+    wrap.innerHTML = html`<button class="btn-link" onclick="generateInsights(true)">${icon('refresh')} Rewrite</button>`;
   } else {
-    wrap.innerHTML = html`<button class="btn btn-secondary btn-sm" onclick="generateInsights()">✦ Write a summary <span class="ai-badge">AI</span></button>`;
+    wrap.innerHTML = html`<button class="btn-link" onclick="generateInsights()">${icon('sparkle')} Ask Claude</button>`;
   }
 }
 
@@ -299,31 +319,34 @@ function jumpToBudgetCategory(cat) {
   switchView('transactions');
 }
 
+// Subscriptions: charged once a month, three or more months, for about the same amount
 function renderRecurring() {
   const card = document.getElementById('recurring-card');
   const list = document.getElementById('recurring-list');
   if (!card || !list) return;
-  const merchantMonths = {};
-  const merchantTotals = {};
+  const byMerchant = new Map();
   for (const t of state.transactions) {
     const m = t.date?.slice(0, 7);
     if (!m || t.amount <= 0) continue;
-    if (!merchantMonths[t.merchant]) { merchantMonths[t.merchant] = new Set(); merchantTotals[t.merchant] = 0; }
-    merchantMonths[t.merchant].add(m);
-    merchantTotals[t.merchant] += t.amount;
+    const months = byMerchant.get(t.merchant) || byMerchant.set(t.merchant, new Map()).get(t.merchant);
+    months.set(m, [...(months.get(m) || []), t.amount]);
   }
-  const recurring = Object.entries(merchantMonths)
-    .filter(([, months]) => months.size >= 3)
-    .map(([merchant, months]) => ({ merchant, months: months.size, avg: merchantTotals[merchant] / months.size }))
-    .sort((a, b) => b.avg - a.avg);
+  const recurring = [];
+  for (const [merchant, months] of byMerchant) {
+    if (months.size < 3) continue;
+    if ([...months.values()].some(list => list.length !== 1)) continue;
+    const amounts = [...months.values()].map(l => l[0]);
+    const avg = amounts.reduce((a, b) => a + b, 0) / amounts.length;
+    if (amounts.every(a => Math.abs(a - avg) <= Math.max(avg * 0.15, 2))) recurring.push({ merchant, months: months.size, avg });
+  }
+  recurring.sort((a, b) => b.avg - a.avg);
   if (!recurring.length) { card.style.display = 'none'; return; }
   card.style.display = '';
-  list.innerHTML = html`${recurring.map(r => html`
-    <div class="recurring-row" onclick="jumpToMerchant('${escAttr(r.merchant)}')">
+  const note = document.getElementById('recurring-note');
+  if (note) note.textContent = `about ${fmt(recurring.reduce((s, r) => s + r.avg, 0))} a month`;
+  list.innerHTML = html`${recurring.slice(0, 12).map(r => html`
+    <div class="recurring-row" onclick="jumpToMerchant('${escAttr(r.merchant)}')" title="See transactions">
       <div class="recurring-merchant">${r.merchant}</div>
-      <div class="recurring-meta">
-        <span class="recurring-months">${r.months} months</span>
-        <span class="recurring-avg">${fmt(r.avg)}/mo avg</span>
-      </div>
+      <div class="recurring-meta"><span class="recurring-avg">${fmt(r.avg)}</span><span class="recurring-months">/mo · ${r.months} months</span></div>
     </div>`)}`;
 }

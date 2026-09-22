@@ -27,7 +27,7 @@ function migrate(store) {
   }
 }
 
-function createApp({ dataDir, uploadsDir, openExternal = null, log = console }) {
+function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null, log = console }) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(uploadsDir, { recursive: true });
   const store = new Store(dataDir);
@@ -44,7 +44,7 @@ function createApp({ dataDir, uploadsDir, openExternal = null, log = console }) 
   app.use('/api', require('./routes/transactions')({ store, plaid, fx }));
   app.use('/api', require('./routes/import')({ store, uploadsDir, apiKey, fx }));
   app.use('/api', require('./routes/budget')({ store, apiKey }));
-  app.use('/api', require('./routes/settings')({ store, version, apiKey, fx }));
+  app.use('/api', require('./routes/settings')({ store, version, apiKey, fx, dataDir, openFolder }));
   app.use('/api/plaid', plaid.router);
   app.use('/api', (req, res) => res.status(404).json({ error: `No such endpoint: ${req.method} ${req.path}` }));
   // eslint-disable-next-line no-unused-vars

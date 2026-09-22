@@ -18,10 +18,25 @@ function semverGt(a, b) {
   return false;
 }
 
-module.exports = function settingsRoutes({ store, version, apiKey, fx }) {
+module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, openFolder = null }) {
   const router = express.Router();
 
   router.get('/version', (_req, res) => res.json({ version }));
+
+  router.get('/about', (_req, res) => {
+    res.json({
+      version,
+      dataDir,
+      transactions: store.read('transactions').length,
+      backups: store.backups('transactions').length,
+      canOpen: Boolean(openFolder),
+    });
+  });
+
+  router.post('/about/open-data-folder', (_req, res) => {
+    if (!openFolder) return res.json({ opened: false, path: dataDir });
+    try { openFolder(dataDir); res.json({ opened: true }); } catch (err) { res.status(500).json({ error: err.message }); }
+  });
 
   // Latest released version, from the download site (cached for a few hours)
   let updateCache = { at: 0, data: null };

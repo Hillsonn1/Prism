@@ -106,6 +106,49 @@ async function uploadFile(file) {
   else showToast('Import complete', 'success');
 }
 
+// ---- The page: bank sync at a glance, then statements ----
+async function renderImportPage() {
+  renderImportBankCard();
+  renderSources();
+}
+
+async function renderImportBankCard() {
+  const card = document.getElementById('import-bank-card');
+  if (!card) return;
+  let s;
+  try { s = await api('GET', '/api/plaid/status'); } catch { card.style.display = 'none'; return; }
+  if (!s.items.length) {
+    card.innerHTML = html`
+      <div class="bank-cta">
+        <div class="bank-cta-icon">${icon('bank')}</div>
+        <div class="bank-cta-text">
+          <div class="bank-cta-title">Skip the statements</div>
+          <div class="muted">Connect a bank or card through Plaid and new purchases show up on their own.</div>
+        </div>
+        <button class="btn btn-primary" onclick="goToSection('settings','plaid-card')">Connect a bank</button>
+      </div>`;
+    return;
+  }
+  card.innerHTML = html`
+    <div class="card-title-row">
+      <h2 class="card-title" style="margin-bottom:0">Connected banks</h2>
+      <div class="header-actions">
+        <span class="muted card-title-note">${s.syncing ? 'Syncing…' : s.lastSyncAt ? `Checked ${fmtAgo(s.lastSyncAt)}` : ''}</span>
+        <button class="btn btn-secondary btn-sm" onclick="plaidSyncNow()">${icon('refresh')} Sync now</button>
+        <button class="btn-link" onclick="goToSection('settings','plaid-card')">Manage</button>
+      </div>
+    </div>
+    <div class="bank-list">${s.items.map(item => html`
+      <div class="bank-row ${item.lastError ? 'has-error' : ''}">
+        <span class="bank-row-icon">${icon('bank')}</span>
+        <div class="bank-row-main">
+          <div class="bank-row-name">${item.institutionName}</div>
+          <div class="muted bank-row-meta">${item.accounts.filter(a => a.enabled).map(a => a.card || a.name).join(' · ')}</div>
+        </div>
+        <div class="bank-row-status">${item.lastError ? html`<span class="key-status unset">Needs attention</span>` : item.lastSyncAt ? html`<span class="muted">Synced ${fmtAgo(item.lastSyncAt)}</span>` : html`<span class="muted">First sync pending</span>`}</div>
+      </div>`)}</div>`;
+}
+
 // ---- Imported statements ----
 async function renderSources() {
   const sources = await api('GET', '/api/sources');

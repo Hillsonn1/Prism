@@ -8,8 +8,8 @@ async function renderPlaidSettings() {
   const statusEl = document.getElementById('plaid-status');
   if (statusEl) {
     statusEl.innerHTML = s.configured
-      ? `<span class="key-status set">✓ ${s.env === 'production' ? 'Production' : 'Sandbox'} keys set</span>`
-      : `<span class="key-status free">Not set up</span>`;
+      ? html`<span class="key-status set">${s.env === 'production' ? 'Production' : 'Sandbox'} keys</span>`
+      : html`<span class="key-status free">Not set up</span>`;
   }
   const envEl = document.getElementById('plaid-env');
   if (envEl) envEl.value = s.env || 'sandbox';
@@ -18,23 +18,28 @@ async function renderPlaidSettings() {
   const secretEl = document.getElementById('plaid-secret');
   if (secretEl) secretEl.placeholder = s.configured ? 'Secret (saved)' : 'Secret';
 
-  const connectBtn = document.getElementById('plaid-connect-btn');
-  if (connectBtn) connectBtn.disabled = !s.configured;
+  const toggle = document.getElementById('plaid-keys-toggle');
+  if (toggle) toggle.textContent = s.configured ? 'Change keys' : 'Set up Plaid keys';
+  const keys = document.getElementById('plaid-keys');
+  if (keys && !s.configured) keys.style.display = '';
 
-  const note = document.getElementById('plaid-sync-note');
-  if (note) {
-    note.textContent = s.syncing ? 'Syncing…'
-      : s.lastSyncAt ? `Last checked ${fmtAgo(s.lastSyncAt)} · checks every ${s.syncIntervalMinutes} min`
-      : s.items.length ? 'First sync pending' : '';
+  const connectBtn = document.getElementById('plaid-connect-btn');
+  if (connectBtn) {
+    connectBtn.disabled = !s.configured;
+    connectBtn.title = s.configured ? '' : 'Save your Plaid keys first';
   }
 
   const list = document.getElementById('plaid-connections');
   if (!list) return;
   if (!s.items.length) {
-    list.innerHTML = `<p class="muted" style="margin:0">${s.configured ? 'No banks connected yet.' : 'Save your Plaid keys, then connect a bank.'}</p>`;
+    list.innerHTML = s.configured
+      ? html`<p class="muted" style="margin:0 0 .5rem">No banks connected yet.</p>`
+      : html`<p class="muted" style="margin:0 0 .5rem">You'll need a free Plaid developer account — keys go below.</p>`;
     return;
   }
-  list.innerHTML = s.items.map(renderPlaidItem).join('');
+  const note = s.syncing ? 'Syncing…' : s.lastSyncAt ? `Last checked ${fmtAgo(s.lastSyncAt)} · every ${s.syncIntervalMinutes} min` : '';
+  list.innerHTML = html`${note ? html`<p class="muted plaid-sync-note">${note}</p>` : ''}${s.items.map(renderPlaidItem)}`;
+  renderSidebarFooter(s);
 }
 
 function renderPlaidItem(item) {
@@ -127,12 +132,11 @@ function plaidCancelLink() {
 }
 
 async function plaidSyncNow(itemId) {
-  const note = document.getElementById('plaid-sync-note');
-  if (note) note.textContent = 'Syncing…';
+  showToast('Syncing…', 'info');
   try {
     const r = await api('POST', '/api/plaid/sync', itemId ? { itemId } : {});
     await loadAll();
-    renderPlaidSettings();
+    rerenderCurrentView();
     const parts = [];
     if (r.added) parts.push(`${r.added} new`);
     if (r.updated) parts.push(`${r.updated} updated`);
@@ -174,20 +178,12 @@ async function plaidDisconnect(itemId, name) {
   }
 }
 
-function rerenderCurrentView() {
-  const v = state.currentView;
-  if (v === 'dashboard') renderDashboard();
-  else if (v === 'transactions') renderTransactions();
-  else if (v === 'merchants') renderMerchants();
-  else if (v === 'budget') renderBudget();
-  else if (v === 'settings') renderSettings();
-  else if (v === 'upload') renderSources();
-}
 
 // Background syncs happen server-side; pick up their results without a reload
 async function pollPlaidChanges() {
   try {
     const s = await api('GET', '/api/plaid/status');
+    renderSidebarFooter(s);
     if (state.plaidChangeCounter === undefined) { state.plaidChangeCounter = s.changeCounter; return; }
     if (s.changeCounter === state.plaidChangeCounter) return;
     state.plaidChangeCounter = s.changeCounter;
@@ -198,3 +194,13 @@ async function pollPlaidChanges() {
   } catch {}
 }
 
+
+// Small status line at the bottom of the sidebar
+function renderSidebarFooter(status) {
+  const el = document.getElementById('sidebar-footer');
+  if (!el) return;
+  if (!status || !status.items?.length) { el.innerHTML = ''; return; }
+  const err = status.items.some(i => i.lastError);
+  el.innerHTML = html`<button class="sidebar-status ${err ? 'has-error' : ''}" onclick="goToSection('settings','plaid-card')" title="Bank sync">
+    ${icon('bank')} <span>${err ? 'Bank needs attention' : status.syncing ? 'Syncing…' : status.lastSyncAt ? `Synced ${fmtAgo(status.lastSyncAt)}` : 'Bank connected'}</span></button>`;
+}

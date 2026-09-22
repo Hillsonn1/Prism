@@ -25,6 +25,7 @@ if (!app.requestSingleInstanceLock()) {
         uploadsDir: path.join(app.getPath('temp'), 'PrismUploads'),
         port: 0,
         openExternal: target => { shell.openExternal(target); return true; },
+        openFolder: dir => shell.openPath(dir),
       }));
     } catch (err) {
       console.error('Failed to start server:', err.message);

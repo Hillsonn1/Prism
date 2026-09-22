@@ -1,6 +1,5 @@
 // Navigation between views.
 
-// ---- Navigation ----
 function switchView(view, { skipHistory = false, clearHistory = false } = {}) {
   if (clearHistory) {
     state.navHistory = [];
@@ -14,13 +13,14 @@ function switchView(view, { skipHistory = false, clearHistory = false } = {}) {
   document.querySelector(`[data-view="${view}"]`).classList.add('active');
   const backBtn = document.getElementById('back-btn');
   if (backBtn) backBtn.style.display = state.navHistory.length ? '' : 'none';
+  window.scrollTo({ top: 0 });
 
   if (view === 'dashboard') renderDashboard();
   if (view === 'transactions') renderTransactions();
   if (view === 'upload') {
     document.getElementById('upload-zone').style.display = '';
     document.getElementById('pending-upload-panel').style.display = 'none';
-    renderSources();
+    renderImportPage();
   }
   if (view === 'merchants') renderMerchants();
   if (view === 'budget') renderBudget();
@@ -29,8 +29,23 @@ function switchView(view, { skipHistory = false, clearHistory = false } = {}) {
 
 function goBack() {
   if (!state.navHistory.length) return;
-  const prev = state.navHistory.pop();
-  switchView(prev, { skipHistory: true });
+  switchView(state.navHistory.pop(), { skipHistory: true });
+}
+
+// Jump to a section on a page (e.g. the bank-sync card in Settings)
+function goToSection(view, sectionId) {
+  switchView(view);
+  requestAnimationFrame(() => document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+}
+
+function rerenderCurrentView() {
+  const v = state.currentView;
+  if (v === 'dashboard') renderDashboard();
+  else if (v === 'transactions') renderTransactions();
+  else if (v === 'merchants') renderMerchants();
+  else if (v === 'budget') renderBudget();
+  else if (v === 'settings') renderSettings();
+  else if (v === 'upload') renderImportPage();
 }
 
 document.querySelectorAll('.nav-link').forEach(link => {
@@ -39,4 +54,3 @@ document.querySelectorAll('.nav-link').forEach(link => {
     switchView(link.dataset.view, { clearHistory: true });
   });
 });
-

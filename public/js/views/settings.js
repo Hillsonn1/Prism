@@ -23,9 +23,10 @@ async function renderSettings() {
 
   const locationEl = document.getElementById('settings-location');
   if (data.location) locationEl.value = data.location;
-  document.getElementById('location-status').innerHTML = data.location
-    ? html`<span class="key-status set">✓ ${data.location}</span>`
-    : html`<span class="key-status unset">Not set — web searches use global results</span>`;
+  document.getElementById('location-status').textContent = data.location
+    ? `Web searches for unfamiliar merchants are biased toward ${data.location}.`
+    : 'City and country, e.g. "Jerusalem, Israel" — helps Claude identify local businesses.';
+  renderAbout();
 
   // Currency
   const cur = data.currency || {};
@@ -223,4 +224,27 @@ async function runCategorize() {
     if (btn) btn.disabled = false;
     setTimeout(() => cleanupProgress(false), 800);
   }
+}
+
+function togglePlaidKeys(force) {
+  const form = document.getElementById('plaid-keys');
+  const show = force !== undefined ? force : form.style.display === 'none';
+  form.style.display = show ? '' : 'none';
+  if (show) document.getElementById('plaid-client-id')?.focus();
+}
+
+async function renderAbout() {
+  const el = document.getElementById('about-content');
+  if (!el) return;
+  try {
+    const a = await api('GET', '/api/about');
+    el.innerHTML = html`
+      <div class="about-grid">
+        <div><span class="about-label">Version</span><span>${a.version}</span></div>
+        <div><span class="about-label">Transactions</span><span>${a.transactions.toLocaleString()}</span></div>
+        <div><span class="about-label">Backups</span><span>${a.backups} daily copies</span></div>
+        <div><span class="about-label">Data folder</span><span class="about-path">${a.dataDir}</span></div>
+      </div>
+      ${a.canOpen ? html`<button class="btn btn-secondary btn-sm" style="margin-top:.75rem" onclick="api('POST','/api/about/open-data-folder')">Open data folder</button>` : ''}`;
+  } catch { el.textContent = ''; }
 }

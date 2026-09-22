@@ -7,7 +7,7 @@ const state = {
   currentView: 'dashboard',
   sort: { col: 'date', dir: 'desc' },
   merchantSort: { col: 'name', dir: 'asc' },
-  dashboardMonth: '',
+  dashboardMonth: undefined,
   budgetMonth: '',
   monthlyBudget: 0,
   income: {},
