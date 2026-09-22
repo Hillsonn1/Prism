@@ -1,11 +1,12 @@
 'use strict';
 const express = require('express');
 const { getConfig: plaidConfig } = require('../plaid');
-const { str, route } = require('../validate');
-const { anomalies } = require('../insights');
+const { str, num, route } = require('../validate');
+const { anomalies, spendingInsights } = require('../insights');
+const { categoryFromDescription } = require('../categories');
 const ai = require('../ai');
 
-module.exports = function settingsRoutes({ store, version, apiKey }) {
+module.exports = function settingsRoutes({ store, version, apiKey, fx }) {
   const router = express.Router();
 
   router.get('/version', (_req, res) => res.json({ version }));
@@ -20,8 +21,22 @@ module.exports = function settingsRoutes({ store, version, apiKey }) {
       monthlyBudget: s.monthlyBudget || 0,
       location: s.location || '',
       prefs: s.prefs || {},
+      currency: { ilsRate: s.currency?.ilsRate || 'auto', latest: fx.latestCached() },
     });
   });
+
+  // ILS per USD: a number to fix the rate, or 'auto' for the daily ECB rate
+  router.post('/settings/currency', route((req, res) => {
+    const raw = req.body.ilsRate;
+    const ilsRate = raw === 'auto' || raw === '' || raw === null || raw === undefined ? 'auto' : num(raw, { field: 'ilsRate', min: 0.5, max: 20 });
+    store.update('settings', s => { s.currency = { ...(s.currency || {}), ilsRate }; });
+    res.json({ success: true, ilsRate });
+  }));
+
+  router.get('/fx/ils', route(async (req, res) => {
+    const date = typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date) ? req.query.date : undefined;
+    res.json(await fx.rate(date));
+  }));
 
   router.post('/settings', route((req, res) => {
     const key = str(req.body.anthropicApiKey, { field: 'anthropicApiKey', max: 300, required: true });
@@ -57,14 +72,22 @@ module.exports = function settingsRoutes({ store, version, apiKey }) {
     res.json({ anomalies: anomalies(store.read('transactions'), month) });
   });
 
+  // Local, instant observations for the dashboard
+  router.get('/insights/local', (req, res) => {
+    const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : '';
+    res.json({ insights: spendingInsights(store.read('transactions'), month) });
+  });
+
   // ---- AI-assisted helpers ----
   router.post('/text-to-category', route(async (req, res) => {
     const text = str(req.body.text, { max: 200 });
     if (!text) return res.status(400).json({ error: 'text required' });
+    const local = categoryFromDescription(text);
+    if (local) return res.json({ category: local, source: 'local' });
     const key = apiKey();
     if (!key) return res.json({ category: null });
     try {
-      res.json({ category: await ai.textToCategory(text, str(req.body.merchant, { max: 120 }) || null, key) });
+      res.json({ category: await ai.textToCategory(text, str(req.body.merchant, { max: 120 }) || null, key), source: 'ai' });
     } catch {
       res.json({ category: null }); // fail quietly so typing in the modal never breaks
     }

@@ -7,7 +7,10 @@
 
 const crypto = require('crypto');
 const { quickNormalizeName } = require('./normalize');
-const { autoCategory, mapBankCategory, mapPlaidCategory, HIGH_CONFIDENCE, LOW_CONFIDENCE } = require('./categories');
+const {
+  autoCategory, genericCategory, findSimilarMerchant, mapBankCategory, mapPlaidCategory,
+  HIGH_CONFIDENCE, LOW_CONFIDENCE,
+} = require('./categories');
 const ai = require('./ai');
 
 const AI_BATCH = 20;
@@ -23,17 +26,25 @@ function dedupKeys(transactions) {
   return keys;
 }
 
-// Best local guess for a raw merchant string. Returns { name, category } where
-// category may be null; a hint is a category from the bank/Plaid.
+// Best local guess for a raw merchant string, with how sure we are:
+// the user's own memory (exact, then a close match) → brand rules → the
+// category the bank or Plaid supplied → generic business-type words.
+// Returns { name, category, confidence, learned }; category may be null.
 function localCategory(rawMerchant, merchants, hint) {
   const name = quickNormalizeName(rawMerchant);
-  let category = merchants[name] || merchants[rawMerchant] || null;
-  let learned = false;
-  if (!category) {
-    category = autoCategory(rawMerchant) || autoCategory(name) || hint || null;
-    learned = Boolean(category);
-  }
-  return { name, category, learned };
+  const remembered = merchants[name] || merchants[rawMerchant];
+  if (remembered) return { name, category: remembered, confidence: 1, learned: false };
+
+  const similar = findSimilarMerchant(name, merchants);
+  if (similar) return { name, category: similar.category, confidence: similar.score, learned: true };
+
+  const brand = autoCategory(rawMerchant) || autoCategory(name);
+  if (brand) return { name, category: brand, confidence: 0.9, learned: true };
+  if (hint) return { name, category: hint, confidence: 0.85, learned: true };
+
+  const generic = genericCategory(rawMerchant) || genericCategory(name);
+  if (generic) return { name, category: generic, confidence: 0.7, learned: true };
+  return { name, category: null, confidence: 0, learned: false };
 }
 
 // Runs Claude over unknown merchants. Confident answers are applied to the
@@ -87,16 +98,27 @@ async function importRows(store, rows, meta, { apiKey = null, onProgress } = {})
   const fresh = [];
   const unknown = new Map(); // raw name → normalized name
 
+  const guesses = new Map(); // normalized name → { category, confidence } for the user to confirm
+
   for (const r of rows) {
     const raw = r.merchant;
-    const { name, category, learned } = localCategory(raw, merchants, mapBankCategory(r.csvCategory));
+    const guess = localCategory(raw, merchants, mapBankCategory(r.csvCategory));
+    const { name } = guess;
     const keyRaw = `${r.date}|${raw}|${r.amount}`;
     const keyNorm = `${r.date}|${name}|${r.amount}`;
     if (existing.has(keyRaw) || existing.has(keyNorm)) continue;
     existing.add(keyRaw);
     existing.add(keyNorm);
-    if (learned) merchants[name] = category;
-    if (!category) unknown.set(raw, name);
+
+    let category = null;
+    if (guess.category && guess.confidence >= HIGH_CONFIDENCE) {
+      category = guess.category;
+      if (guess.learned) merchants[name] = category;
+    } else if (guess.category) {
+      guesses.set(name, { category: guess.category, confidence: guess.confidence });
+    } else {
+      unknown.set(raw, name);
+    }
     fresh.push({
       id: crypto.randomUUID(),
       date: r.date,
@@ -104,6 +126,7 @@ async function importRows(store, rows, meta, { apiKey = null, onProgress } = {})
       _raw: raw,
       rawSource: raw,
       amount: r.amount,
+      ...(r.originalCurrency ? { originalAmount: r.originalAmount, originalCurrency: r.originalCurrency, fxRate: r.fxRate } : {}),
       category,
       card: meta.card || undefined,
       source: meta.source,
@@ -111,10 +134,12 @@ async function importRows(store, rows, meta, { apiKey = null, onProgress } = {})
     });
   }
 
-  let suggestions = [];
+  let suggestions = [...guesses].map(([merchant, g]) => ({ merchant, ...g }));
   let unknownMerchants = [...unknown.values()];
   if (unknown.size && apiKey) {
-    ({ suggestions, unknownMerchants } = await aiPass(unknown, fresh, merchants, apiKey, onProgress));
+    const fromAI = await aiPass(unknown, fresh, merchants, apiKey, onProgress);
+    suggestions.push(...fromAI.suggestions);
+    unknownMerchants = fromAI.unknownMerchants;
   }
   for (const t of fresh) delete t._raw;
 
@@ -147,22 +172,27 @@ async function categorizeUncategorized(store, { apiKey = null, onProgress } = {}
   let autoUpdated = 0;
   const unknown = new Map();
   const rows = [];
+  const guesses = new Map();
   for (const [merchant, list] of byMerchant) {
-    const category = merchants[merchant] || autoCategory(merchant);
-    if (category) {
-      merchants[merchant] = category;
-      for (const t of list) { t.category = category; autoUpdated++; }
+    const guess = localCategory(merchant, merchants, null);
+    if (guess.category && guess.confidence >= HIGH_CONFIDENCE) {
+      merchants[merchant] = guess.category;
+      for (const t of list) { t.category = guess.category; autoUpdated++; }
+    } else if (guess.category) {
+      guesses.set(merchant, { category: guess.category, confidence: guess.confidence });
     } else {
       unknown.set(merchant, merchant);
       for (const t of list) { t._raw = merchant; rows.push(t); }
     }
   }
 
-  let suggestions = [];
+  let suggestions = [...guesses].map(([merchant, g]) => ({ merchant, ...g }));
   let unknownMerchants = [...unknown.keys()];
   if (unknown.size && apiKey) {
     const before = rows.filter(t => !t.category).length;
-    ({ suggestions, unknownMerchants } = await aiPass(unknown, rows, merchants, apiKey, onProgress));
+    const fromAI = await aiPass(unknown, rows, merchants, apiKey, onProgress);
+    suggestions.push(...fromAI.suggestions);
+    unknownMerchants = fromAI.unknownMerchants;
     autoUpdated += before - rows.filter(t => !t.category).length;
   }
   for (const t of rows) delete t._raw;

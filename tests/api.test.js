@@ -92,3 +92,40 @@ test('prefs and budgets round-trip', async () => {
     assert.equal((await api('GET', '/api/income/2026-10')).data.length, 0);
   } finally { await close(); }
 });
+
+test('shekel purchases keep the original amount and compute dollars from the rate', async () => {
+  const { api, srv, close } = await boot();
+  try {
+    // a fixed manual rate makes the test deterministic and offline
+    assert.equal((await api('POST', '/api/settings/currency', { ilsRate: 4 })).status, 200);
+    const { data: t } = await api('POST', '/api/transactions', { date: '2026-09-20', merchant: 'Cofix', originalAmount: 120, originalCurrency: 'ILS' });
+    assert.equal(t.amount, 30);
+    assert.equal(t.originalAmount, 120);
+    assert.equal(t.originalCurrency, 'ILS');
+    assert.equal(t.fxRate, 4);
+    // editing the shekel amount recomputes the dollars
+    const { data: u } = await api('PUT', `/api/transactions/${t.id}`, { originalAmount: 200, originalCurrency: 'ILS' });
+    assert.equal(u.amount, 50);
+    // switching back to dollars drops the shekel fields
+    const { data: v } = await api('PUT', `/api/transactions/${t.id}`, { originalCurrency: 'USD', amount: 12 });
+    assert.equal(v.amount, 12);
+    assert.equal(v.originalAmount, undefined);
+    assert.equal((await api('GET', '/api/settings')).data.currency.ilsRate, 4);
+    assert.equal((await api('GET', '/api/fx/ils')).data.rate, 4);
+
+    // an ILS statement converts every row
+    const csv = 'Date,Description,Amount\n2026-09-15,SHUFERSAL DEAL,-200.00\n2026-09-16,COFIX,-40.00\n';
+    const form = new FormData();
+    form.append('file', new Blob([csv], { type: 'text/csv' }), 'isracard.csv');
+    form.append('currency', 'ILS');
+    const { uploadId } = await (await fetch(`${srv.url}/api/upload/start`, { method: 'POST', body: form })).json();
+    const text = await (await fetch(`${srv.url}/api/upload/stream/${uploadId}`)).text();
+    const last = JSON.parse(text.split('\n').filter(l => l.startsWith('data:')).pop().slice(5));
+    assert.equal(last.result.imported, 2);
+    const { data: txns } = await api('GET', '/api/transactions');
+    const shuf = txns.find(x => x.merchant === 'Shufersal Deal');
+    assert.equal(shuf.amount, 50);
+    assert.equal(shuf.originalAmount, 200);
+    assert.equal(shuf.category, 'Groceries');
+  } finally { await close(); }
+});

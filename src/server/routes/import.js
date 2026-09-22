@@ -10,6 +10,7 @@ const { parseCSV, parsePDF } = require('../parsers/statements');
 const { importRows, categorizeUncategorized } = require('../importer');
 const { quickNormalizeName } = require('../normalize');
 const { isPayment } = require('../categories');
+const { mergeProposals } = require('../dedupe');
 const ai = require('../ai');
 const { str, route } = require('../validate');
 
@@ -48,7 +49,17 @@ function applyRenames(store, renames) {
   return changed;
 }
 
-module.exports = function importRoutes({ store, uploadsDir, apiKey }) {
+// Statement rows in shekels become dollar rows that remember the shekel amount
+async function convertRows(rows, fx) {
+  const out = [];
+  for (const r of rows) {
+    const conv = await fx.toUSD(r.amount, r.date);
+    out.push({ ...r, ...conv });
+  }
+  return out;
+}
+
+module.exports = function importRoutes({ store, uploadsDir, apiKey, fx }) {
   const router = express.Router();
   const upload = multer({ dest: uploadsDir, limits: { fileSize: 25 * 1024 * 1024 } });
   const pendingUploads = new Map(); // uploadId → { filePath, originalName, cardName, statementName }
@@ -68,6 +79,7 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey }) {
       originalName: req.file.originalname,
       cardName: str(req.body.cardName, { max: 60 }) || '',
       statementName: str(req.body.statementName, { max: 120 }) || '',
+      currency: req.body.currency === 'ILS' ? 'ILS' : 'USD',
     });
     setTimeout(() => {
       const u = pendingUploads.get(uploadId);
@@ -82,17 +94,21 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey }) {
     if (!pending) return res.status(404).json({ error: 'Upload not found or expired.' });
     pendingUploads.delete(req.params.id);
     const send = sse(res);
-    const { filePath, originalName, cardName, statementName } = pending;
+    const { filePath, originalName, cardName, statementName, currency } = pending;
     try {
       send(10, 'Parsing file…');
       const ext = path.extname(originalName).toLowerCase();
-      const rows = ext === '.csv'
+      let rows = ext === '.csv'
         ? parseCSV(fs.readFileSync(filePath, 'utf8'))
         : await parsePDF(fs.readFileSync(filePath));
       discard(filePath);
       if (!rows.length) {
         send(0, 'No transactions found in this file. The format may not be supported.', { error: true });
         return res.end();
+      }
+      if (currency === 'ILS') {
+        send(20, 'Converting shekels to dollars…');
+        rows = await convertRows(rows, fx);
       }
       send(30, 'Processing transactions…');
       const result = await importRows(store, rows, { source: statementName || originalName, card: cardName }, {
@@ -128,6 +144,23 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey }) {
     const updated = applyRenames(store, renames);
     res.json({ updated });
   });
+
+  // Smart Clean: propose merges locally, apply only what the user kept
+  router.post('/cleanup/dedupe/preview', (_req, res) => {
+    res.json({ proposals: mergeProposals(store.read('transactions'), store.read('merchants')) });
+  });
+
+  router.post('/cleanup/dedupe/apply', route((req, res) => {
+    const mapping = req.body.mapping;
+    if (!mapping || typeof mapping !== 'object' || Array.isArray(mapping)) return res.status(400).json({ error: 'mapping object required' });
+    const renames = new Map();
+    for (const [from, to] of Object.entries(mapping)) {
+      const f = str(from, { max: 120 }), t = str(to, { max: 120 });
+      if (f && t && f !== t) renames.set(f, t);
+    }
+    const merged = applyRenames(store, renames);
+    res.json({ merged, renamed: renames.size });
+  }));
 
   router.post('/cleanup/ai-deduplicate', route(async (_req, res) => {
     const key = apiKey();

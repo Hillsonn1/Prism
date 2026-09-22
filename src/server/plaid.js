@@ -7,7 +7,7 @@
 
 const crypto = require('crypto');
 const express = require('express');
-const { isPayment, mapPlaidCategory } = require('./categories');
+const { isPayment, mapPlaidCategory, LOW_CONFIDENCE } = require('./categories');
 const { localCategory, dedupKeys, aiPass } = require('./importer');
 
 const HOSTS = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
@@ -106,7 +106,11 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       const amount = txnAmount(p);
       const date = txnDate(p);
       const raw = p.merchant_name || p.name || 'Unknown';
-      const { name, category, learned } = localCategory(raw, merchants, mapPlaidCategory(p.personal_finance_category));
+      // No user in the loop during a background sync: apply any plausible guess
+      const guess = localCategory(raw, merchants, mapPlaidCategory(p.personal_finance_category));
+      const name = guess.name;
+      const category = guess.confidence >= LOW_CONFIDENCE ? guess.category : null;
+      const learned = Boolean(category) && guess.learned;
       const keyRaw = `${date}|${p.name}|${amount}`;
       const keyNorm = `${date}|${name}|${amount}`;
       // Already imported from a statement for the same card

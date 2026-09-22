@@ -16,6 +16,7 @@ const FILES = {
   income:       { file: 'income.json',       empty: () => ({}) },
   expenses:     { file: 'expenses.json',     empty: () => ({}) },
   plaid:        { file: 'plaid.json',        empty: () => ({ items: [] }) },
+  fx:           { file: 'fx.json',           empty: () => ({}) },
 };
 
 const BACKUPS_TO_KEEP = 7;

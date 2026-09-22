@@ -1,17 +1,11 @@
 'use strict';
 // Merchant name normalization: turns raw bank descriptors like
 // "SQ *BLUE BOTTLE COFFEE 0142 BROOKLYN NY" into "Blue Bottle Coffee".
-// The rules were tuned against real US and Israeli statements; the order of
-// the replacements matters.
-
-function toTitleCase(str) {
-  return str
-    .toLowerCase()
-    .replace(/(?:^|[\s\-\/&\*])(\w)/g, m => m.toUpperCase());
-}
+// The rules were tuned against real US and Israeli statements; order matters.
 
 // Known abbreviations that regex title-casing can't fix
 const MERCHANT_ABBR = new Map([
+  ['wsj', 'Wall Street Journal'],
   ['wholefds', 'Whole Foods'],
   ['wholefood', 'Whole Foods'],
   ['amzn mktp', 'Amazon'],
@@ -67,6 +61,86 @@ const MERCHANT_ABBR = new Map([
   ['smartecarte', 'Smartecarte'],
   ['amex fine hotels', 'Amex Fine Hotels & Resorts'],
 ]);
+
+// Brands whose proper casing title-casing gets wrong. Matched on the whole
+// cleaned name (case-insensitively).
+const BRAND_CASING = new Map([
+  ['mcdonalds', "McDonald's"], ["mcdonald's", "McDonald's"],
+  ['trader joes', "Trader Joe's"], ["trader joe's", "Trader Joe's"],
+  ['dunkin', "Dunkin'"], ['dunkin donuts', "Dunkin'"],
+  ['wendys', "Wendy's"], ['arbys', "Arby's"], ['macys', "Macy's"], ['kohls', "Kohl's"],
+  ['lowes', "Lowe's"], ['sams club', "Sam's Club"], ['bjs', "BJ's"], ['bjs wholesale', "BJ's Wholesale"],
+  ['chick fil a', 'Chick-fil-A'], ['chick-fil-a', 'Chick-fil-A'], ['in-n-out burger', 'In-N-Out Burger'],
+  ['ebay', 'eBay'], ['paypal', 'PayPal'], ['youtube', 'YouTube'], ['youtube premium', 'YouTube Premium'],
+  ['itunes', 'iTunes'], ['icloud', 'iCloud'], ['doordash', 'DoorDash'], ['grubhub', 'Grubhub'],
+  ['airbnb', 'Airbnb'], ['linkedin', 'LinkedIn'], ['github', 'GitHub'], ['openai', 'OpenAI'], ['chatgpt', 'ChatGPT'],
+  ['whatsapp', 'WhatsApp'], ['tiktok', 'TikTok'], ['soulcycle', 'SoulCycle'], ['wework', 'WeWork'],
+  ['jetblue', 'JetBlue'], ['fedex', 'FedEx'], ['petsmart', 'PetSmart'], ['gamestop', 'GameStop'],
+  ['t-mobile', 'T-Mobile'], ['at&t', 'AT&T'], ['7-eleven', '7-Eleven'], ['7 eleven', '7-Eleven'],
+  ['walmart', 'Walmart'], ['wal-mart', 'Walmart'], ['walgreens', 'Walgreens'], ['cvs', 'CVS'],
+  ['ikea', 'IKEA'], ['kfc', 'KFC'], ['h&m', 'H&M'], ['usps', 'USPS'], ['ups', 'UPS'], ['ihop', 'IHOP'],
+  ['amc', 'AMC'], ['bp', 'BP'], ['mta', 'MTA'], ['nyc', 'NYC'], ['dmv', 'DMV'], ['tj maxx', 'TJ Maxx'],
+  ['gnc', 'GNC'], ['dsw', 'DSW'], ['rei', 'REI'], ['ulta', 'Ulta'], ['lululemon', 'Lululemon'],
+  ['el al', 'El Al'], ['10bis', '10bis'], ['ten bis', '10bis'], ['wolt', 'Wolt'], ['gett', 'Gett'],
+  ['ksp', 'KSP'], ['am pm', 'AM:PM'], ['am:pm', 'AM:PM'], ['ampm', 'AM:PM'], ['hot', 'HOT'], ['yes', 'yes'],
+]);
+
+// Words that stay uppercase inside a title-cased name
+const ACRONYMS = new Set(['CVS', 'USPS', 'UPS', 'KFC', 'IKEA', 'BP', 'AMC', 'H&M', 'MTA', 'NYC', 'DMV', 'ATM',
+  'IHOP', 'TJ', 'BBQ', 'DSW', 'REI', 'GNC', 'AT&T', 'TD', 'PNC', 'HSBC', 'BMW', 'NBA', 'NFL', 'MLB', 'NHL', 'NYU',
+  'UCLA', 'MIT', 'LIRR', 'NJT', 'PATH', 'JFK', 'LGA', 'EWR', 'SFO', 'LAX', 'KSP', 'HOT', 'USA', 'UK', 'EU', 'IL',
+  'LLC', 'DBA', 'PC', 'MD', 'DDS', 'CPA', 'HVAC', 'IT', 'AI', 'TV', 'DVD', 'CD', 'PS', 'XBOX', 'VIP', 'GPS', 'RV',
+  'SUV', 'UPS', 'DHL', 'IRS', 'DOT', 'MTA', 'AAA', 'YMCA', 'YWCA', 'JCC', 'UJA', 'NPR', 'PBS']);
+
+// Generic words that are part of a merchant name, never a city, so they are
+// kept when a location is stripped from the end of a descriptor
+const NOT_A_CITY = new Set(['PIZZA', 'PIZZERIA', 'CAFE', 'COFFEE', 'ESPRESSO', 'MARKET', 'MARKETS', 'STORE', 'STORES',
+  'SHOP', 'SHOPS', 'GRILL', 'BAR', 'BAKERY', 'DELI', 'RESTAURANT', 'KITCHEN', 'INC', 'LLC', 'CO', 'GAS', 'FUEL',
+  'PHARMACY', 'CLEANERS', 'LIQUOR', 'LIQUORS', 'WINE', 'WINES', 'DINER', 'BURGER', 'BURGERS', 'TACO', 'TACOS',
+  'SUSHI', 'SALON', 'NAILS', 'SPA', 'HOTEL', 'PARKING', 'AUTO', 'TIRE', 'TIRES', 'DENTAL', 'MEDICAL', 'CLINIC',
+  'CENTER', 'CENTRE', 'SUPPLY', 'HARDWARE', 'FARM', 'FARMS', 'FOODS', 'FOOD', 'FRESH', 'SUPERMARKET', 'GROCERY',
+  'EXPRESS', 'MART', 'PLUS', 'ONE', 'MAX', 'PRO', 'USA', 'GROUP', 'SERVICES', 'SERVICE', 'SYSTEMS', 'STUDIO',
+  'STUDIOS', 'FITNESS', 'GYM', 'YOGA', 'CLUB', 'LOUNGE', 'TAVERN', 'PUB', 'BREWING', 'BREWERY', 'DISTILLERY',
+  'WINERY', 'BISTRO', 'EATERY', 'BAGELS', 'BAGEL', 'DONUTS', 'CREAMERY', 'CHOCOLATE', 'CANDY', 'TEA', 'JUICE',
+  'SMOOTHIE', 'KOSHER', 'GLATT', 'BUTCHER', 'FISH', 'SEAFOOD', 'STEAKHOUSE', 'STEAK', 'CHICKEN', 'WINGS', 'RAMEN',
+  'NOODLE', 'NOODLES', 'THAI', 'CHINESE', 'MEXICAN', 'ITALIAN', 'INDIAN', 'JAPANESE', 'KOREAN', 'FALAFEL',
+  'SHAWARMA', 'HUMMUS', 'BOOKS', 'MUSIC', 'TOYS', 'GAMES', 'SPORTS', 'CYCLE', 'CYCLES', 'BIKES', 'BIKE', 'MOTORS',
+  'GARAGE', 'BODY', 'WASH', 'LUBE', 'OIL', 'ENERGY', 'POWER', 'WATER', 'ELECTRIC', 'WIRELESS', 'MOBILE', 'ONLINE',
+  'DIGITAL', 'MEDIA', 'NEWS', 'TIMES', 'POST', 'JOURNAL', 'PRESS', 'PRINT', 'PHOTO', 'VIDEO', 'FILM', 'THEATRE',
+  'THEATER', 'CINEMA', 'MUSEUM', 'GALLERY', 'GARDEN', 'GARDENS', 'NURSERY', 'FLOWERS', 'FLORIST', 'GIFTS', 'GIFT',
+  'CARDS', 'PARTY', 'EVENTS', 'TICKETS', 'TRAVEL', 'TOURS', 'AIRLINES', 'AIRWAYS', 'RENTAL', 'RENTALS', 'STORAGE',
+  'MOVING', 'MOVERS', 'PLUMBING', 'HEATING', 'COOLING', 'ROOFING', 'PAINT', 'PAINTING', 'DESIGN', 'DESIGNS',
+  'HOME', 'HOUSE', 'FURNITURE', 'MATTRESS', 'LIGHTING', 'KIDS', 'BABY', 'PETS', 'PET', 'VET', 'ANIMAL', 'HOSPITAL',
+  'PHYSICAL', 'THERAPY', 'OPTICAL', 'VISION', 'EYE', 'EYES', 'HEALTH', 'CARE', 'LABS', 'LAB', 'IMAGING',
+  'PEDIATRICS', 'FAMILY', 'URGENT', 'PRIMARY', 'WELLNESS', 'BEAUTY', 'BARBER', 'BARBERS', 'CUTS', 'HAIR', 'SKIN',
+  'TAN', 'MASSAGE', 'WAX', 'LASH', 'BROW', 'SCHOOL', 'ACADEMY', 'UNIVERSITY', 'COLLEGE', 'INSTITUTE', 'LEARNING',
+  'TUTORING', 'LESSONS', 'CAMP', 'DAYCARE', 'PRESCHOOL', 'YESHIVA', 'SHUL', 'SYNAGOGUE', 'CHURCH', 'TEMPLE',
+  'MINISTRIES', 'CHARITY', 'FOUNDATION', 'FUND', 'INSURANCE', 'FINANCIAL', 'BANK', 'CREDIT', 'LOAN', 'LOANS',
+  'MORTGAGE', 'REALTY', 'PROPERTIES', 'MANAGEMENT', 'ASSOCIATES', 'PARTNERS', 'CONSULTING', 'LAW', 'LEGAL',
+  'ACCOUNTING', 'TAX', 'NOTARY', 'SECURITY', 'ALARM', 'LOCKSMITH', 'SHOE', 'SHOES', 'FOOTWEAR', 'APPAREL',
+  'CLOTHING', 'FASHION', 'BOUTIQUE', 'OUTLET', 'OUTLETS', 'DEPOT', 'WAREHOUSE', 'WHOLESALE', 'DISCOUNT', 'DOLLAR',
+  'GENERAL', 'VARIETY', 'THRIFT', 'VINTAGE', 'ANTIQUES', 'JEWELERS', 'JEWELRY', 'WATCH', 'WATCHES', 'EYEWEAR']);
+
+// Two-word US cities, longest first, so "NEW YORK" is stripped as a unit
+const TWO_WORD_CITIES = ['LONG ISLAND CITY', 'SALT LAKE CITY', 'OKLAHOMA CITY', 'KANSAS CITY', 'JERSEY CITY',
+  'REDWOOD CITY', 'GARDEN CITY', 'FOSTER CITY', 'STUDIO CITY', 'CULVER CITY', 'DALY CITY', 'UNION CITY',
+  'ROCKVILLE CENTRE', 'FOREST HILLS', 'FRESH MEADOWS', 'KEW GARDENS', 'REGO PARK', 'STATEN ISLAND', 'NEW ROCHELLE',
+  'WHITE PLAINS', 'GREAT NECK', 'FAR ROCKAWAY', 'MOUNT VERNON', 'MOUNT KISCO', 'SILVER SPRING', 'SANTA MONICA',
+  'SANTA CLARA', 'SANTA BARBARA', 'SANTA ROSA', 'SANTA CRUZ', 'SAN ANTONIO', 'SAN FRANCISCO', 'SAN DIEGO',
+  'SAN JOSE', 'SAN MATEO', 'SAN RAFAEL', 'SAN BERNARDINO', 'FORT WORTH', 'FORT LAUDERDALE', 'FORT LEE',
+  'FORT COLLINS', 'BOCA RATON', 'PALM BEACH', 'PALM SPRINGS', 'ST LOUIS', 'SAINT LOUIS', 'ST PAUL', 'SAINT PAUL',
+  'ST PETERSBURG', 'EL PASO', 'COLORADO SPRINGS', 'VIRGINIA BEACH', 'MYRTLE BEACH', 'LONG BEACH', 'MIAMI BEACH',
+  'ANN ARBOR', 'GRAND RAPIDS', 'BATON ROUGE', 'NEW ORLEANS', 'NEW HAVEN', 'NEW BRUNSWICK', 'NEW HYDE PARK',
+  'PALO ALTO', 'MENLO PARK', 'MOUNTAIN VIEW', 'LAKE SUCCESS', 'VALLEY STREAM', 'LOS ANGELES', 'LOS GATOS',
+  'LAS VEGAS', 'NEW YORK', 'LAKEWOOD', 'CEDARHURST', 'WEST HEMPSTEAD', 'EAST MEADOW', 'NORTH BERGEN',
+  'WEST ORANGE', 'EAST BRUNSWICK', 'SOUTH ORANGE', 'HIGHLAND PARK', 'PARK SLOPE', 'CROWN HEIGHTS', 'BORO PARK',
+  'BOROUGH PARK', 'SHEEPSHEAD BAY', 'BRIGHTON BEACH', 'HOWARD BEACH', 'OZONE PARK', 'JACKSON HEIGHTS',
+  'SUNSET PARK', 'BAY RIDGE', 'CONEY ISLAND', 'BEVERLY HILLS', 'WEST HOLLYWOOD', 'SHERMAN OAKS', 'PARK CITY',
+  'BOYNTON BEACH', 'DELRAY BEACH', 'HALLANDALE BEACH', 'SUNNY ISLES', 'NORTH MIAMI', 'CORAL GABLES',
+  'CORAL SPRINGS', 'POMPANO BEACH', 'DEERFIELD BEACH', 'HOLLYWOOD FL', 'WEST PALM', 'LAKE WORTH', 'ROYAL PALM',
+  'MONSEY', 'SPRING VALLEY', 'NEW CITY', 'NEW SQUARE', 'POMONA', 'AIRMONT', 'WESLEY HILLS', 'CHESTNUT RIDGE',
+  'UPPER SADDLE', 'SADDLE RIVER', 'HO-HO-KUS', 'GLEN ROCK', 'FAIR LAWN', 'ELMWOOD PARK', 'CLIFFSIDE PARK']
+  .sort((a, b) => b.length - a.length);
 
 const US_STATES = new Set([
   'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA',
@@ -142,43 +216,97 @@ const ISRAELI_CITY_SECOND_PARTS = new Map([
   ['BARAQ',    ['BNEI', 'BNEY', 'BNAI', 'BNI']],
 ]);
 
+function toTitleCase(str) {
+  return str
+    .toLowerCase()
+    .replace(/(?:^|[\s\-\/&\*])(\w)/g, m => m.toUpperCase());
+}
+
+// Title case with brand names and acronyms kept the way people write them
+function properCase(str) {
+  const key = str.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (BRAND_CASING.has(key)) return BRAND_CASING.get(key);
+  return toTitleCase(str)
+    .split(' ')
+    .map(w => {
+      const up = w.toUpperCase();
+      if (ACRONYMS.has(up) || US_STATES.has(up)) return up;
+      const brand = BRAND_CASING.get(w.toLowerCase());
+      return brand && !brand.includes(' ') ? brand : w;
+    })
+    .join(' ');
+}
+
+const abbrKey = s => s.toLowerCase().replace(/[^a-z0-9*./&+ ]/g, '').replace(/\s+/g, ' ').trim();
+
+// Expands known abbreviations, matched on the start of the name
+function expandAbbreviation(s) {
+  const key = abbrKey(s);
+  for (const [abbr, expanded] of MERCHANT_ABBR) {
+    if (key === abbr || key.startsWith(abbr + ' ')) return expanded;
+  }
+  return null;
+}
+
+// "JOES PIZZA NEW YORK NY" → "JOES PIZZA". Removes a trailing state code and
+// the city before it: known one- or two-word cities are stripped outright; an
+// unknown word is treated as a city unless it is a common merchant word.
+function stripTrailingLocation(s) {
+  const m = s.match(/^(.*?)[\s,\-]+([A-Z]{2})\s*$/);
+  if (!m || !US_STATES.has(m[2])) return s;
+  let rest = m[1].replace(/[\s,\-–—]+$/, '');
+  const upper = rest.toUpperCase();
+  for (const city of TWO_WORD_CITIES) {
+    if (upper === city) return '';
+    if (upper.endsWith(' ' + city)) return rest.slice(0, rest.length - city.length).replace(/[\s,\-–—]+$/, '');
+  }
+  const words = rest.split(/\s+/);
+  const last = words[words.length - 1].toUpperCase();
+  const alphabetic = /^[A-Z][A-Z'.-]{3,}$/.test(last);
+  const knownCity = KNOWN_CITIES.includes(last.replace(/[^A-Z]/g, ''));
+  if (words.length > 1 && (knownCity || (alphabetic && !NOT_A_CITY.has(last)))) {
+    rest = words.slice(0, -1).join(' ');
+  }
+  return rest.replace(/[\s,\-–—]+$/, '');
+}
+
 function quickNormalizeName(merchant) {
   let s = merchant.trim();
 
   // Payment processor / wallet prefixes (order matters — longer first)
   s = s.replace(/^APLPAY\s+/i, '');
+  const hadProcessorPrefix = /^(SQ|TST|GMF|MC|PY|PYD|WW|SP|APL|IN|DRI|WU|PP|NYX|OTTER|TOAST|CLOVER|D\s*J)\s*\*/i.test(s);
   s = s.replace(/^(SQ|TST|GMF|MC|PY|PYD|WW|SP|APL|IN|DRI|WU|PP|NYX|OTTER|TOAST|CLOVER|D\s*J)\s*\*\s*/i, '');
   s = s.replace(/^(PAYPAL|VENMO|ZELLE|STRIPE|SQUARE)\s*\*\s*/i, '');
-  // Repeated-brand prefix: "Google *Google One" → "Google One", "Ebay *Ebay Checkout" → "Ebay Checkout"
+  // Repeated-brand prefix: "Google *Google One" → "Google One"
   s = s.replace(/^(\w+)\s+\*\1\b\s*/i, '$1 ').trim();
+
+  // Known abbreviations are checked on the raw form too ("ITUNES.COM/BILL", "D J*WSJ")
+  const early = expandAbbreviation(merchant) || expandAbbreviation(s);
+  if (early) return early;
+
+  // Membership / subscriber ids: "Walmart+ Member 04/28009..." → "Walmart+"
+  s = s.replace(/\s+(member|subscr|account)\s+[\d\/\-]+.*$/i, '');
 
   // Long embedded reference/phone numbers in last word (e.g. "KEVA1800800199HOL")
   s = s.replace(/\d{7,}\w{0,4}\s*$/, '');
-  // US phone at end of string, with optional lowercase/uppercase state code and trailing noise
-  // ("WEB CHAVER424-242-8371NJ", "GOOGLE ONE855-836-3987ca -")
+  // US phone at end of string, with optional state code and trailing noise
   s = s.replace(/\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}[A-Za-z]{0,2}[\s\-.,*]*$/gi, '');
-  // Phone directly concatenated to a word with no preceding space ("One855-836-3987ca -")
-  // Replace starting from the letter that precedes the digits so the word prefix is kept.
+  // Phone directly concatenated to a word ("One855-836-3987ca -")
   s = s.replace(/([A-Za-z])\d{3}[-.\s]?\d{3}[-.\s]?\d{4}[A-Za-z]{0,2}[\s\-.,*]*$/, '$1');
-  // US phone numbers mid-string (global, with word boundary): "(877)263-9300" or "800-568-7625"
+  // US phone numbers mid-string
   s = s.replace(/\s*\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b\s*/g, ' ');
-  // International / Israeli phone: "03 5202323" or "5202323tel" or "5202323 tel"
+  // International / Israeli phone: "03 5202323" or "5202323tel"
   s = s.replace(/\s+\d{6,10}\s*(tel|fax|phone)?\s*$/gi, '');
   s = s.replace(/\s+\d{2,3}\s+\d{6,8}\s*(tel|fax|phone)?\s*$/gi, '');
-  // Trailing 2-digit area code directly concatenated to merchant word ("MECUHEDET03" → "MECUHEDET")
-  // Only when digits follow a letter (not standalone digits like "Route 66" or "Highway 99")
+  // Trailing 2-digit area code glued to a merchant word ("MECUHEDET03")
   s = s.replace(/[A-Za-z]\d{2}\s*$/, m => m[0]);
-  // Multi-segment reference/transaction codes: "C 18-13827-63987" or "O*25-14041-09950"
-  // Replace with a space so adjacent words don't accidentally merge.
+  // Multi-segment reference codes: "C 18-13827-63987" or "O*25-14041-09950"
   s = s.replace(/\s+[A-Z]\s*\*?\s*\d{2,}(?:-\d{3,}){2,}\b/gi, ' ');
-  // Standalone multi-segment numbers without a letter prefix
   s = s.replace(/\s+\d{2,}(?:-\d{3,}){2,}\b/g, '');
 
-  // Trailing city + state with spaces (e.g. "Starbucks Flushing NY" or "McDonald's New York NY")
-  // Require 4+ char city words to avoid stripping short abbreviations like "APP NY"
-  s = s.replace(/\s+(?:[A-Z][a-zA-Z'-]{3,14}\s+){0,2}([A-Z]{2})\s*$/, (match, state) =>
-    US_STATES.has(state) ? '' : match
-  );
+  // Trailing city + state
+  s = stripTrailingLocation(s);
 
   // Trailing dates embedded by the bank ("MCDONALD'S 04/15" or "CHEVRON 2024-03-01")
   s = s.replace(/\s+\d{1,2}\/\d{1,2}\/?\d{0,4}\s*$/, '');
@@ -319,41 +447,40 @@ function quickNormalizeName(merchant) {
 
   // Strip embedded URLs / help domains
   s = s.replace(/\s+https?:\/\/\S*/gi, '');
-  // Strip URL at end, including optional state code directly concatenated (e.g. "GETSAUCE.COMDE", "24SIX.APPNY")
   s = s.replace(/\s+\S*\.(com|net|org|app|co|io)(\/\S*)?([A-Z]{2})?\s*$/gi, (match, tld, path, stateCode) =>
     (!stateCode || US_STATES.has(stateCode.toUpperCase())) ? '' : match
   );
-
-  // Re-run state strip after URL removal (catches "MERCHANT.COM NY" pattern)
-  s = s.replace(/\s+(?:[A-Z][a-zA-Z'-]{3,14}\s+){0,2}([A-Z]{2})\s*$/, (match, state) =>
-    US_STATES.has(state) ? '' : match
-  );
+  // Location again, now that a URL can no longer hide it
+  s = stripTrailingLocation(s);
 
   // URL-style names: www.merchant.com → merchant, 24six.app → 24six
-  // Use \S* (not \b) so "24six.appwww.24six" → "24six" (consumes everything after the TLD)
   s = s.replace(/^www\./i, '').replace(/\.(com|net|org|co|app|io)\S*/gi, '');
 
   // Parenthetical suffixes: "Merchant (City, State)"
   s = s.replace(/\s*\([^)]{0,40}\)\s*$/, '');
 
-  // Legal suffixes — spaced (word boundary) and concatenated (e.g. "YESHLTD" after city strip)
+  // Legal suffixes — spaced and concatenated ("YESHLTD")
   s = s.replace(/\s*,?\s*\b(LLC|INC\.?|CORP\.?|LTD\.?|CO\.|PLC|PLLC|L\.L\.C\.?)\s*$/i, '');
   s = s.replace(/(.{2,}?)(LTD|LLC|INC|CORP|PLLC|PLC)\.?\s*$/i, '$1').trim();
 
-  // Store / location numbers: #1234, St1234, or trailing standalone digits
+  // Store / location numbers: "STORE 08812", "#1234", "F1234", "ST1234", trailing digits
+  s = s.replace(/\s+(STORE|STR|ST|LOC|LOCATION|UNIT|SHOP|BRANCH|NO)\.?\s*#?\s*\d{1,6}\s*$/i, '');
   s = s.replace(/\s+#\d[\d\-]*(\s.*)?$/, '');
-  s = s.replace(/\s+St\d{3,}\s*$/i, '');
+  s = s.replace(/\s+[A-Z]\d{3,}\s*$/i, '');
   s = s.replace(/\s+\d{3,}\s*$/, '');
+  // Short branch numbers: Square appends them ("SQ *BLUE DOOR 44") and Israeli
+  // banks write them after the name ("PAZ YELLOW 12"). Bank descriptors are
+  // all caps; a mixed-case "Studio 54" or "Route 66" is a real name.
+  const allCaps = merchant === merchant.toUpperCase();
+  if (hadProcessorPrefix || (allCaps && /\s\S+\s+\d{1,2}\s*$/.test(s))) s = s.replace(/\s+\d{1,2}\s*$/, '');
 
-  // Transaction / reference codes: * CODE or *CODE at end (handles space after *)
-  s = s.replace(/\s*\*\s*[A-Z0-9]{3,}\S*$/i, '');
+  // Transaction / reference codes: "*2K3" — codes carry digits; "*CHIPOTLE" is a sub-merchant
+  s = s.replace(/\s*\*\s*(?=[A-Z0-9]*\d)[A-Z0-9]{3,}\S*$/i, '');
+  s = s.replace(/\s*\*\s*/g, ' ');
 
-  // eBay transaction IDs: "eBay C 18-13827-63987" / "eBay O*25-14041-09950"
+  // eBay transaction ids
   s = s.replace(/^(ebay)\s+[a-z]\s+[\d\-]+\s*$/i, '$1');
   s = s.replace(/^(ebay)\s+[a-z]\s*\*[\d\-]+\s*$/i, '$1');
-
-  // Membership/subscriber IDs: "Walmart+ Member 04/28009..." → "Walmart+"
-  s = s.replace(/\s+(member|subscr|account)\s+[\d\/\-]+.*$/i, '');
 
   // Repeated leading word: "Etsy Etsy ..." → "Etsy ..."
   s = s.replace(/^(\w+)\s+\1\b\s*/i, '$1 ').trim();
@@ -361,15 +488,10 @@ function quickNormalizeName(merchant) {
   // Trailing country names
   s = s.replace(/\s+(united states|united kingdom|israel)\s*$/i, '');
 
+  s = s.replace(/[\s,\-–—:]+$/, '').replace(/^[\s,\-–—:]+/, '');
   s = s.replace(/\s{2,}/g, ' ').trim() || merchant.trim();
 
-  // Abbreviation expansion (check before title-casing)
-  const lower = s.toLowerCase();
-  for (const [abbr, expanded] of MERCHANT_ABBR) {
-    if (lower === abbr || lower.startsWith(abbr + ' ')) return expanded;
-  }
-
-  return toTitleCase(s);
+  return expandAbbreviation(s) || properCase(s);
 }
 
-module.exports = { toTitleCase, quickNormalizeName, MERCHANT_ABBR, US_STATES, KNOWN_CITIES, ISRAELI_CITIES };
+module.exports = { toTitleCase, properCase, quickNormalizeName, stripTrailingLocation, MERCHANT_ABBR, US_STATES, KNOWN_CITIES, ISRAELI_CITIES, BRAND_CASING };
