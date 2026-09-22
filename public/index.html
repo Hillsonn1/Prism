@@ -22,7 +22,7 @@
           <span class="nav-icon">📋</span> Transactions
         </a>
         <a class="nav-link" data-view="upload" href="#">
-          <span class="nav-icon">📂</span> Statements
+          <span class="nav-icon">📂</span> Import
         </a>
         <a class="nav-link" data-view="merchants" href="#">
           <span class="nav-icon">🏪</span> Merchants
@@ -50,11 +50,13 @@
         <div id="dashboard-content">
           <div class="empty-state" id="dashboard-empty">
             <h2>No transactions yet</h2>
-            <p>Upload a credit card statement to get started.</p>
-            <button class="btn btn-primary" onclick="switchView('upload')">Upload Statement</button>
-            <p style="font-size:.8rem;color:var(--muted);margin-top:1rem;max-width:340px;line-height:1.65;margin-left:auto;margin-right:auto">
-              Some features are labeled <span class="ai-badge" style="font-size:.68rem">AI</span> — those need an Anthropic API key to work. Add one in
-              <a href="#" onclick="switchView('settings');return false" style="color:var(--primary);font-weight:500">Settings</a> to unlock them.
+            <p>Import a statement or connect your bank to get started.</p>
+            <div class="empty-actions">
+              <button class="btn btn-primary" onclick="switchView('upload')">Import a statement</button>
+              <button class="btn btn-secondary" onclick="switchView('settings')">Connect a bank</button>
+            </div>
+            <p class="empty-hint">
+              Everything works offline. Features marked <span class="ai-badge">AI</span> are optional extras that need an Anthropic API key.
             </p>
           </div>
           <div id="dashboard-data" style="display:none">
@@ -76,15 +78,12 @@
                 <h2 class="card-title">Spending by Category</h2>
                 <div id="pie-chart"></div>
                 <div id="category-chart"></div>
-                <div id="insights-card" style="display:none;margin-top:1.5rem;padding-top:1.25rem;border-top:1px solid var(--border)">
+                <div id="insights-card" class="insights-card" style="display:none">
                   <div class="insights-header">
-                    <span class="insights-title"><span class="ai-badge">AI</span> Insights</span>
-                    <button id="insights-refresh-btn" class="btn-link insights-refresh" onclick="refreshInsights()" style="display:none">↺ Refresh</button>
+                    <span class="insights-title">Insights</span>
                   </div>
-                  <div id="insights-generate-state">
-                    <button id="insights-generate-btn" class="insights-generate-btn" onclick="generateInsights()">✦ Generate insights</button>
-                  </div>
-                  <div id="insights-content" class="insights-content" style="display:none"></div>
+                  <ul id="insights-list" class="insights-list"></ul>
+                  <div id="insights-ai" class="insights-ai"></div>
                 </div>
               </div>
               <div class="dash-right-stack">
@@ -172,14 +171,14 @@
 
       <div id="view-upload" class="view">
         <div class="page-header">
-          <h1>Statements</h1>
+          <h1>Import</h1>
         </div>
         <div class="card upload-card">
           <div class="upload-zone" id="upload-zone">
             <div class="upload-icon">📄</div>
             <h2>Drop your statement here</h2>
             <p>CSV or PDF files from your bank or credit card</p>
-            <p class="muted upload-alt">Or <a href="#" onclick="switchView('settings');return false">connect your bank with Plaid</a> and purchases come in on their own.</p>
+            <p class="muted upload-alt">Or <a href="#" onclick="switchView('settings');return false">connect your bank</a> and purchases come in on their own.</p>
             <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
               Choose File
             </button>
@@ -196,6 +195,13 @@
                 <label class="settings-label">Card nickname <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
                 <input type="text" id="card-name-input" placeholder="e.g. Amex Platinum, Chase Sapphire…" style="width:100%" list="card-suggestions" />
                 <datalist id="card-suggestions"></datalist>
+              </div>
+              <div class="upload-meta-field upload-meta-currency">
+                <label class="settings-label" for="statement-currency">Statement currency</label>
+                <select id="statement-currency" style="width:100%">
+                  <option value="USD">US dollars ($)</option>
+                  <option value="ILS">Shekels (₪) — converted to dollars</option>
+                </select>
               </div>
             </div>
             <div class="pending-upload-actions">
@@ -234,8 +240,8 @@
             <div id="settings-key-status"></div>
           </div>
           <p class="muted" style="margin:1rem 0 1.25rem">
-            Prism works great on its own. Add an Anthropic API key to unlock:
-            auto-categorization on import, smart merchant identification, and spending insights.
+            Prism categorizes, cleans up and analyzes on its own. An Anthropic API key adds Claude for the
+            leftovers: unfamiliar merchants, web-search identification, and written summaries.
           </p>
           <div class="settings-form">
             <label class="settings-label">Anthropic API Key <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
@@ -290,6 +296,36 @@
           <button class="btn btn-primary" id="plaid-connect-btn" onclick="plaidConnect()" style="margin-top:1rem">+ Connect a bank</button>
         </div>
         <div class="card">
+          <div class="card-title-row">
+            <h2 class="card-title" style="margin-bottom:0">Currency</h2>
+            <div id="currency-status"></div>
+          </div>
+          <p class="muted" style="margin:1rem 0 1.25rem">
+            Dollars are what Prism calculates with. Purchases made in shekels keep their ₪ amount and show it
+            next to the dollar figure. Choose an ILS statement when importing, or pick shekels when adding a transaction.
+          </p>
+          <div class="settings-form">
+            <label class="settings-label" for="currency-mode">Exchange rate</label>
+            <div class="settings-input-row">
+              <select id="currency-mode" onchange="onCurrencyModeChange()">
+                <option value="auto">Daily rate (European Central Bank)</option>
+                <option value="manual">Fixed rate</option>
+              </select>
+              <input type="number" id="currency-rate" min="0.5" max="20" step="0.01" placeholder="₪ per $1, e.g. 3.6" style="width:180px;display:none" />
+              <button class="btn btn-primary" onclick="saveCurrency()">Save</button>
+            </div>
+            <p class="settings-hint">The daily rate is fetched when needed and cached, so past imports keep the rate of their day.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h2 class="card-title">Appearance</h2>
+          <div class="theme-picker" id="theme-picker" role="group" aria-label="Theme">
+            <button class="btn btn-secondary btn-sm" data-theme="system" onclick="setTheme('system')">System</button>
+            <button class="btn btn-secondary btn-sm" data-theme="light" onclick="setTheme('light')">Light</button>
+            <button class="btn btn-secondary btn-sm" data-theme="dark" onclick="setTheme('dark')">Dark</button>
+          </div>
+        </div>
+        <div class="card">
           <h2 class="card-title">Cards</h2>
           <p class="muted" style="margin-bottom:1.25rem">
             Rename cards imported from your statements. Changes apply to all matching transactions.
@@ -331,17 +367,17 @@
             </div>
             <div class="cleanup-action">
               <div>
-                <div class="cleanup-action-title">Smart Deduplicate <span class="ai-badge">AI</span></div>
-                <div class="muted cleanup-action-desc">Merges duplicate merchants with slight spelling differences, truncations, or location suffixes. One fast AI call.</div>
+                <div class="cleanup-action-title">Merge Duplicates</div>
+                <div class="muted cleanup-action-desc">Finds merchants that are really the same one — spelling variants, "Amazon Mktpl" vs "Amazon" — and lets you review before merging.</div>
               </div>
-              <button class="btn btn-secondary" id="dedup-btn" onclick="aiDeduplicate()">Smart Clean</button>
+              <button class="btn btn-secondary" id="dedup-btn" onclick="smartClean()">Review</button>
             </div>
             <div class="cleanup-action">
               <div>
-                <div class="cleanup-action-title">Auto-categorize <span class="ai-badge">AI</span></div>
-                <div class="muted cleanup-action-desc">Uses AI to categorize anything still uncategorized. Requires an API key.</div>
+                <div class="cleanup-action-title">Categorize the Rest</div>
+                <div class="muted cleanup-action-desc">Applies your merchant memory and the built-in rules to anything still uncategorized. With an API key, Claude takes a pass at what's left <span class="ai-badge">AI</span>.</div>
               </div>
-              <button class="btn btn-secondary" id="categorize-btn" onclick="runAICategorize()">Run AI</button>
+              <button class="btn btn-secondary" id="categorize-btn" onclick="runCategorize()">Run</button>
             </div>
           </div>
           <div id="cleanup-status" style="margin-top:1rem;display:none">
@@ -374,16 +410,17 @@
 
       <div id="view-merchants" class="view">
         <div class="page-header">
-          <h1>Merchant Memory</h1>
+          <h1>Merchants</h1>
+          <div class="header-actions"><span id="merchants-count" class="count-badge"></span></div>
         </div>
         <div class="card">
-          <p class="muted">These are the categories automatically applied when a merchant is seen again.</p>
+          <p class="muted">Prism remembers the category you choose for each merchant and applies it the next time that merchant shows up.</p>
           <div style="margin-top:1rem">
             <input type="text" id="merchant-search" placeholder="Search merchants..." style="width:100%; max-width:320px" />
           </div>
           <div id="merchants-empty" class="empty-state" style="display:none">
             <div class="empty-icon">🏪</div>
-            <p>No merchants saved yet. Upload a statement to get started.</p>
+            <p>No merchants yet.</p>
           </div>
           <table id="merchants-table" class="data-table" style="margin-top:1rem">
             <thead>
@@ -425,31 +462,59 @@
       </div>
       <div class="modal-body" style="gap:.85rem">
         <div class="edit-field">
-          <label class="edit-label">Merchant</label>
+          <label class="edit-label" for="edit-merchant">Merchant</label>
           <input type="text" id="edit-merchant" />
         </div>
-        <div style="display:flex;gap:.75rem">
-          <div class="edit-field" style="flex:1">
-            <label class="edit-label">Date</label>
+        <div class="edit-grid">
+          <div class="edit-field">
+            <label class="edit-label" for="edit-date">Date</label>
             <input type="date" id="edit-date" />
           </div>
-          <div class="edit-field" style="flex:1">
-            <label class="edit-label">Amount ($)</label>
-            <input type="number" id="edit-amount" step="0.01" min="0" />
+          <div class="edit-field">
+            <label class="edit-label" for="edit-currency">Currency</label>
+            <select id="edit-currency" onchange="onEditCurrencyChange()">
+              <option value="USD">Dollars ($)</option>
+              <option value="ILS">Shekels (₪)</option>
+            </select>
+          </div>
+          <div class="edit-field" id="edit-amount-field">
+            <label class="edit-label" for="edit-amount">Amount ($)</label>
+            <input type="number" id="edit-amount" step="0.01" min="0" inputmode="decimal" />
+          </div>
+          <div class="edit-field" id="edit-original-field" style="display:none">
+            <label class="edit-label" for="edit-original">Amount (₪)</label>
+            <input type="number" id="edit-original" step="0.01" min="0" inputmode="decimal" />
           </div>
         </div>
+        <p class="settings-hint" id="edit-fx-hint"></p>
+        <label class="edit-check"><input type="checkbox" id="edit-credit" /> This is a refund or credit</label>
         <div class="edit-field">
-          <label class="edit-label">Category</label>
+          <label class="edit-label" for="edit-category">Category</label>
           <select id="edit-category"></select>
         </div>
         <div class="edit-field">
-          <label class="edit-label">Note</label>
+          <label class="edit-label" for="edit-notes">Note</label>
           <input type="text" id="edit-notes" placeholder="e.g. birthday dinner, work reimbursable" />
         </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
         <button class="btn btn-primary" onclick="saveEditModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Merge duplicates review -->
+  <div id="merge-modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:640px" role="dialog" aria-modal="true" aria-labelledby="merge-modal-title">
+      <div class="modal-header">
+        <h2 id="merge-modal-title">Merge Duplicate Merchants</h2>
+        <p class="modal-subtitle" id="merge-modal-subtitle"></p>
+      </div>
+      <div class="modal-body merge-list" id="merge-modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeMergeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="applyMerges()">Merge selected</button>
       </div>
     </div>
   </div>
@@ -477,6 +542,21 @@
     </div>
   </div>
 
-  <script src="app.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/nav.js"></script>
+  <script src="js/charts.js"></script>
+  <script src="js/views/dashboard.js"></script>
+  <script src="js/views/transactions.js"></script>
+  <script src="js/views/upload.js"></script>
+  <script src="js/views/budget.js"></script>
+  <script src="js/views/merchants.js"></script>
+  <script src="js/views/settings.js"></script>
+  <script src="js/views/plaid.js"></script>
+  <script src="js/modals.js"></script>
+  <script src="js/update.js"></script>
+  <script src="js/app.js"></script>
 </body>
 </html>

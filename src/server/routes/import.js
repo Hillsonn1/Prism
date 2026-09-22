@@ -172,17 +172,13 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey, fx }) {
     res.json({ merged, mapping });
   }));
 
+  // Works without a key (rules and memory only); with one, Claude handles the rest
   router.get('/cleanup/categorize/stream', async (_req, res) => {
     const send = sse(res);
     try {
-      const key = apiKey();
-      if (!key) {
-        send(0, 'No API key configured — add one in Settings.', { error: true, noKey: true });
-        return res.end();
-      }
       send(10, 'Applying categorization rules…');
       const result = await categorizeUncategorized(store, {
-        apiKey: key,
+        apiKey: apiKey(),
         onProgress: (frac, msg) => send(Math.round(30 + frac * 60), msg),
       });
       send(95, 'Saving…');

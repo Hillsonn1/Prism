@@ -6,10 +6,38 @@ const { anomalies, spendingInsights } = require('../insights');
 const { categoryFromDescription } = require('../categories');
 const ai = require('../ai');
 
+const SITE_URL = 'https://prismspendtracker.netlify.app';
+const UPDATE_URL = `${SITE_URL}/version.json`;
+
+function semverGt(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) > (pb[i] || 0)) return true;
+    if ((pa[i] || 0) < (pb[i] || 0)) return false;
+  }
+  return false;
+}
+
 module.exports = function settingsRoutes({ store, version, apiKey, fx }) {
   const router = express.Router();
 
   router.get('/version', (_req, res) => res.json({ version }));
+
+  // Latest released version, from the download site (cached for a few hours)
+  let updateCache = { at: 0, data: null };
+  router.get('/update', async (_req, res) => {
+    if (Date.now() - updateCache.at < 6 * 3600 * 1000 && updateCache.data) return res.json(updateCache.data);
+    try {
+      const r = await fetch(UPDATE_URL, { signal: AbortSignal.timeout(6000), cache: 'no-store' });
+      const remote = await r.json();
+      const latest = String(remote.version || '');
+      const data = { current: version, latest, siteUrl: remote.siteUrl || SITE_URL, updateAvailable: Boolean(latest) && semverGt(latest, version) };
+      updateCache = { at: Date.now(), data };
+      res.json(data);
+    } catch {
+      res.json({ current: version, latest: null, siteUrl: SITE_URL, updateAvailable: false });
+    }
+  });
 
   // Never exposes the keys themselves
   router.get('/settings', (_req, res) => {
