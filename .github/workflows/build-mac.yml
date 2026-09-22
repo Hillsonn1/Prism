@@ -1,9 +1,10 @@
 name: Build Mac DMG
 
+# Manual only: the DMG target hits electron-builder's hdiutil bug on CI
+# runners and failed on roughly half of pushes. Releases ship a zip via
+# release.yml; run this by hand when you specifically want a DMG.
 on:
   workflow_dispatch:
-  push:
-    branches: [main, master]
 
 jobs:
   build-mac:
