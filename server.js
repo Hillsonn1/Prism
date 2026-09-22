@@ -3,7 +3,7 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-// Minimal CSV parser (avoids pkg subpath-export issues with csv-parse)
+// Minimal CSV parser
 function parseCSVRows(text) {
   const lines = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   const parseLine = line => {
@@ -47,13 +47,8 @@ function getAnthropic() {
 const app = express();
 const PORT = 3000;
 
-const isPkg = typeof process.pkg !== 'undefined';
-const isElectron = !isPkg && !!process.env.ELECTRON_USER_DATA;
-const APP_DATA = isElectron
-  ? process.env.ELECTRON_USER_DATA
-  : isPkg
-    ? path.join(process.env.APPDATA || path.dirname(process.execPath), 'Prism')
-    : __dirname;
+const isElectron = !!process.env.ELECTRON_USER_DATA;
+const APP_DATA = isElectron ? process.env.ELECTRON_USER_DATA : __dirname;
 
 // Keep the window open and log crashes to a file so errors are always visible
 process.on('uncaughtException', err => {
@@ -73,26 +68,16 @@ process.on('uncaughtException', err => {
 
 app.use(express.json());
 
-if (isPkg) {
-  // File contents are embedded at build time via bundle-public.js — no filesystem access needed
-  const bundle = require('./public-bundle');
-  for (const [file, { mime, data }] of Object.entries(bundle)) {
-    const content = Buffer.from(data, 'base64');
-    if (file === 'index.html') app.get('/', (_req, res) => res.setHeader('Content-Type', mime).send(content));
-    app.get(`/${file}`, (_req, res) => res.setHeader('Content-Type', mime).send(content));
-  }
-} else {
-  app.use(express.static(path.join(__dirname, 'public')));
-}
+app.use(express.static(path.join(__dirname, 'public')));
 
-// Writable data lives in %APPDATA%\Prism when packaged, or ./data in dev
-const DATA_DIR = (isPkg || isElectron) ? APP_DATA : path.join(__dirname, 'data');
+// Writable data lives in Electron's userData dir when packaged, or ./data in dev
+const DATA_DIR = isElectron ? APP_DATA : path.join(__dirname, 'data');
 const TRANSACTIONS_FILE = path.join(DATA_DIR, 'transactions.json');
 const MERCHANTS_FILE = path.join(DATA_DIR, 'merchants.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const INCOME_FILE = path.join(DATA_DIR, 'income.json');
 const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
-const UPLOADS_DIR = (isPkg || isElectron)
+const UPLOADS_DIR = isElectron
   ? path.join(require('os').tmpdir(), 'PrismUploads')
   : path.join(__dirname, 'uploads');
 
@@ -102,25 +87,6 @@ const LOW_CONFIDENCE  = 0.55; // ask user to manually categorize
 [DATA_DIR, UPLOADS_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
-
-// Seed settings from bundled defaults: always ensure the API key is present
-if (isPkg) {
-  try {
-    const bundle = require('./public-bundle');
-    if (bundle['settings.json']) {
-      const bundledSettings = JSON.parse(Buffer.from(bundle['settings.json'].data, 'base64').toString());
-      if (!fs.existsSync(SETTINGS_FILE)) {
-        fs.writeFileSync(SETTINGS_FILE, JSON.stringify(bundledSettings, null, 2));
-      } else if (bundledSettings.anthropicApiKey) {
-        const stored = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-        if (!stored.anthropicApiKey) {
-          stored.anthropicApiKey = bundledSettings.anthropicApiKey;
-          fs.writeFileSync(SETTINGS_FILE, JSON.stringify(stored, null, 2));
-        }
-      }
-    }
-  } catch {}
-}
 
 // In-memory cache: reads hit disk once, then return from memory.
 // Writes update memory immediately and flush to disk asynchronously.
@@ -2096,11 +2062,6 @@ const server = app.listen(PORT, () => {
   console.log(`\nPrism is running!`);
   console.log(`Open http://localhost:${PORT} in your browser`);
   console.log(`Close this window to quit.\n`);
-
-  if (isPkg) {
-    const { exec } = require('child_process');
-    setTimeout(() => exec(`start http://localhost:${PORT}`), 600);
-  }
 });
 
 server.on('error', err => {
