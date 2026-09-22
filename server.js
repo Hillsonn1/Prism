@@ -77,6 +77,7 @@ const MERCHANTS_FILE = path.join(DATA_DIR, 'merchants.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const INCOME_FILE = path.join(DATA_DIR, 'income.json');
 const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
+const PLAID_FILE = path.join(DATA_DIR, 'plaid.json');
 const UPLOADS_DIR = isElectron
   ? path.join(require('os').tmpdir(), 'PrismUploads')
   : path.join(__dirname, 'uploads');
@@ -1618,6 +1619,7 @@ app.get('/api/settings', (req, res) => {
   const settings = loadJSON(SETTINGS_FILE, {});
   res.json({
     hasApiKey: Boolean(settings.anthropicApiKey),
+    plaidConfigured: Boolean(getPlaidConfig()),
     budgets: settings.budgets || {},
     monthlyBudget: settings.monthlyBudget || 0,
     location: settings.location || '',
@@ -1666,6 +1668,9 @@ app.post('/api/cards/rename', (req, res) => {
     if (t.card === oldName) { t.card = newName.trim().slice(0, 60); updated++; }
   }
   saveJSON(TRANSACTIONS_FILE, transactions);
+  const store = loadPlaidStore();
+  for (const item of store.items) for (const a of item.accounts) if (a.card === oldName) a.card = newName.trim().slice(0, 60);
+  savePlaidStore(store);
   res.json({ success: true, updated });
 });
 
@@ -1693,6 +1698,11 @@ app.post('/api/sources/update', (req, res) => {
     }
   }
   saveJSON(TRANSACTIONS_FILE, transactions);
+  const store = loadPlaidStore();
+  for (const item of store.items) for (const a of item.accounts) {
+    if (a.source === oldName) { a.source = newName; a.card = cardVal; }
+  }
+  savePlaidStore(store);
   res.json({ success: true });
 });
 
@@ -2052,6 +2062,538 @@ app.post('/api/budgets/suggest', async (req, res) => {
 });
 
 migrateToTitleCase();
+
+// ---- Plaid bank sync ----
+// Prism is a local app, so this works without a public URL: credentials live
+// in settings.json (plaid: { clientId, secret, env, userId }), linked Items
+// (access tokens, accounts, sync cursors) live in plaid.json, banks are linked
+// through Plaid's Hosted Link page in the system browser, and instead of
+// webhooks the server polls /transactions/sync on launch and on a timer.
+
+const PLAID_HOSTS = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
+const PLAID_COUNTRY_CODES = ['US'];
+const PLAID_SYNC_INTERVAL_MS = 15 * 60 * 1000;
+const PLAID_HISTORY_DAYS = 90;          // history pulled when a bank is first linked
+const PLAID_LINK_LIFETIME_S = 60 * 60;  // how long a Hosted Link page stays valid
+
+// Plaid personal_finance_category → Prism category. Detailed codes override primaries.
+const PLAID_CATEGORY_MAP = {
+  FOOD_AND_DRINK: 'Dining & Restaurants',
+  FOOD_AND_DRINK_GROCERIES: 'Groceries',
+  GENERAL_MERCHANDISE: 'Shopping',
+  GENERAL_MERCHANDISE_GIFTS_AND_NOVELTIES: 'Gifts & Donations',
+  GENERAL_MERCHANDISE_OFFICE_SUPPLIES: 'Business Expenses',
+  HOME_IMPROVEMENT: 'Home & Garden',
+  MEDICAL: 'Health & Medical',
+  PERSONAL_CARE: 'Personal Care',
+  PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: 'Health & Medical',
+  GENERAL_SERVICES_AUTOMOTIVE: 'Gas & Fuel',
+  GENERAL_SERVICES_EDUCATION: 'Education',
+  GENERAL_SERVICES_INSURANCE: 'Utilities & Bills',
+  GOVERNMENT_AND_NON_PROFIT_DONATIONS: 'Gifts & Donations',
+  TRANSPORTATION: 'Travel & Transport',
+  TRANSPORTATION_GAS: 'Gas & Fuel',
+  TRAVEL: 'Travel & Transport',
+  RENT_AND_UTILITIES: 'Utilities & Bills',
+  ENTERTAINMENT: 'Entertainment',
+  ENTERTAINMENT_TV_AND_MOVIES: 'Subscriptions & Streaming',
+  ENTERTAINMENT_MUSIC_AND_AUDIO: 'Subscriptions & Streaming',
+  LOAN_PAYMENTS: 'Utilities & Bills',
+  BANK_FEES: 'Other',
+};
+
+function getPlaidConfig() {
+  const p = loadJSON(SETTINGS_FILE, {}).plaid || {};
+  if (!p.clientId || !p.secret) return null;
+  return { clientId: p.clientId, secret: p.secret, env: p.env === 'production' ? 'production' : 'sandbox' };
+}
+function loadPlaidStore() { return loadJSON(PLAID_FILE, { items: [] }); }
+function savePlaidStore(store) { saveJSON(PLAID_FILE, store); }
+// What the UI is allowed to see — never the access token
+function publicPlaidItem(item) {
+  const { accessToken, ...rest } = item;
+  return rest;
+}
+
+async function plaidPost(endpoint, body) {
+  const cfg = getPlaidConfig();
+  if (!cfg) {
+    const err = new Error("Plaid isn't set up yet — add your client ID and secret in Settings.");
+    err.status = 400;
+    throw err;
+  }
+  // PRISM_PLAID_HOST points the client at a local mock for development
+  const host = process.env.PRISM_PLAID_HOST || PLAID_HOSTS[cfg.env];
+  const res = await fetch(host + endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'PLAID-CLIENT-ID': cfg.clientId, 'PLAID-SECRET': cfg.secret },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(30000),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(data.error_message || `Plaid request failed (${res.status})`);
+    err.plaidCode = data.error_code;
+    err.status = 502;
+    throw err;
+  }
+  return data;
+}
+const plaidErrorResponse = (res, err) => res.status(err.status || 500).json({ error: err.message, code: err.plaidCode });
+
+function mapPlaidCategory(pfc) {
+  if (!pfc) return null;
+  return PLAID_CATEGORY_MAP[pfc.detailed] || PLAID_CATEGORY_MAP[pfc.primary] || null;
+}
+
+// Payments, transfers and income aren't spending. Refunds stay in as negative
+// amounts, the same way statement imports treat credits.
+function isPlaidSpend(p) {
+  const primary = p.personal_finance_category?.primary || '';
+  const detailed = p.personal_finance_category?.detailed || '';
+  if (primary === 'TRANSFER_IN' || primary === 'TRANSFER_OUT' || primary === 'INCOME') return false;
+  if (detailed === 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT') return false;
+  const name = p.merchant_name || p.name || '';
+  return !PAYMENT_RE.test(name.replace(/[\s\-.,*]+$/, ''));
+}
+
+// Purchase date rather than posting date, so a charge keeps its date when it settles
+const plaidTxnDate = p => (p.authorized_date || p.date || '').slice(0, 10);
+const plaidAmount = p => Math.round(p.amount * 100) / 100;
+
+// Apply one Item's /transactions/sync result to the transaction store.
+// Categorization follows the statement-import pipeline: merchant memory →
+// keyword rules → Plaid's own category → AI (confident results only; the rest
+// wait in the dashboard's uncategorized banner).
+async function applyPlaidUpdates(item, { added, modified, removed }) {
+  const result = { added: 0, updated: 0, removed: 0, skipped: 0 };
+  const accounts = Object.fromEntries(item.accounts.map(a => [a.accountId, a]));
+  const merchants = loadJSON(MERCHANTS_FILE, {});
+
+  // Phase 1: decide what's new, against a snapshot (AI calls below take a while)
+  const snapshot = loadJSON(TRANSACTIONS_FILE, []);
+  const knownIds = new Set();
+  const existingKeys = new Set();
+  for (const t of snapshot) {
+    if (t.plaidId) knownIds.add(t.plaidId);
+    existingKeys.add(`${t.date}|${t.merchant}|${t.amount}`);
+    if (t.rawSource) existingKeys.add(`${t.date}|${t.rawSource}|${t.amount}`);
+  }
+  const newTransactions = [];
+  const rekeys = [];                 // pending charges that have now posted
+  const unknownMerchants = new Map(); // raw name → normalized name
+
+  for (const p of added) {
+    const account = accounts[p.account_id];
+    if (!account || !account.enabled || knownIds.has(p.transaction_id)) continue;
+    if (p.pending_transaction_id && knownIds.has(p.pending_transaction_id)) { rekeys.push(p); continue; }
+    if (!isPlaidSpend(p)) { result.skipped++; continue; }
+
+    const amount = plaidAmount(p);
+    const date = plaidTxnDate(p);
+    const rawMerchant = p.merchant_name || p.name || 'Unknown';
+    const quickName = quickNormalizeName(rawMerchant);
+    const keyRaw = `${date}|${p.name}|${amount}`;
+    const keyNorm = `${date}|${quickName}|${amount}`;
+    // Already imported from a statement for the same card
+    if (existingKeys.has(keyRaw) || existingKeys.has(keyNorm)) { result.skipped++; continue; }
+    existingKeys.add(keyRaw);
+    existingKeys.add(keyNorm);
+
+    let category = merchants[quickName] || merchants[rawMerchant] || null;
+    if (!category) {
+      category = autoCategory(rawMerchant) || mapPlaidCategory(p.personal_finance_category);
+      if (category) merchants[quickName] = category;
+    }
+    if (!category) unknownMerchants.set(rawMerchant, quickName);
+
+    newTransactions.push({
+      id: crypto.randomUUID(),
+      date,
+      merchant: quickName,
+      _raw: rawMerchant,
+      rawSource: p.name || rawMerchant,
+      amount,
+      category,
+      card: account.card || undefined,
+      source: account.source,
+      importedAt: new Date().toISOString(),
+      plaidId: p.transaction_id,
+      plaidAccountId: p.account_id,
+      ...(p.pending ? { pending: true } : {}),
+    });
+  }
+
+  const apiKey = getApiKey();
+  if (unknownMerchants.size && apiKey) {
+    const unknownList = [...unknownMerchants.keys()];
+    for (let i = 0; i < unknownList.length; i += 20) {
+      try {
+        const aiResults = await aiCategorizeMerchants(unknownList.slice(i, i + 20), apiKey);
+        for (const r of aiResults) {
+          const cleanName = r.normalized || unknownMerchants.get(r.merchant) || r.merchant;
+          if (r.confidence >= HIGH_CONFIDENCE) {
+            merchants[cleanName] = r.category;
+            for (const t of newTransactions) {
+              if (t._raw === r.merchant && !t.category) { t.merchant = cleanName; t.category = r.category; }
+            }
+          } else if (r.confidence >= LOW_CONFIDENCE) {
+            for (const t of newTransactions) if (t._raw === r.merchant) t.merchant = cleanName;
+          }
+        }
+      } catch (e) {
+        console.error('Plaid sync AI batch failed:', e.message);
+      }
+    }
+  }
+  for (const t of newTransactions) delete t._raw;
+
+  // Phase 2: apply against the live store, so edits made meanwhile survive
+  const transactions = loadJSON(TRANSACTIONS_FILE, []);
+  const byPlaidId = new Map(transactions.filter(t => t.plaidId).map(t => [t.plaidId, t]));
+  for (const p of rekeys) {
+    const row = byPlaidId.get(p.pending_transaction_id);
+    if (!row || byPlaidId.has(p.transaction_id)) continue; // user deleted it, or already re-keyed
+    Object.assign(row, { plaidId: p.transaction_id, amount: plaidAmount(p), date: plaidTxnDate(p) });
+    delete row.pending;
+    byPlaidId.delete(p.pending_transaction_id);
+    byPlaidId.set(p.transaction_id, row);
+    result.updated++;
+  }
+  for (const p of modified) {
+    const row = byPlaidId.get(p.transaction_id);
+    if (!row) continue;
+    row.amount = plaidAmount(p);
+    row.date = plaidTxnDate(p);
+    if (p.pending) row.pending = true; else delete row.pending;
+    result.updated++;
+  }
+  const removedIds = new Set(removed.map(r => r.transaction_id));
+  const next = transactions.filter(t => !(t.plaidId && removedIds.has(t.plaidId)));
+  result.removed = transactions.length - next.length;
+  const fresh = newTransactions.filter(t => !byPlaidId.has(t.plaidId));
+  next.push(...fresh);
+  result.added = fresh.length;
+
+  saveJSON(TRANSACTIONS_FILE, next);
+  saveJSON(MERCHANTS_FILE, merchants);
+  return result;
+}
+
+async function syncPlaidItem(item) {
+  const startCursor = item.cursor || undefined;
+  for (let attempt = 1; ; attempt++) {
+    let cursor = startCursor;
+    let status = null;
+    const updates = { added: [], modified: [], removed: [] };
+    try {
+      for (;;) {
+        const body = { access_token: item.accessToken, count: 500, options: { include_personal_finance_category: true } };
+        if (cursor) body.cursor = cursor;
+        const page = await plaidPost('/transactions/sync', body);
+        updates.added.push(...(page.added || []));
+        updates.modified.push(...(page.modified || []));
+        updates.removed.push(...(page.removed || []));
+        status = page.transactions_update_status || status;
+        cursor = page.next_cursor;
+        if (!page.has_more) break;
+      }
+    } catch (err) {
+      // Plaid changed the data mid-pagination: start the whole update over
+      if (err.plaidCode === 'TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION' && attempt < 3) continue;
+      throw err;
+    }
+    const result = await applyPlaidUpdates(item, updates);
+    item.cursor = cursor;
+    item.updateStatus = status;
+    item.lastSyncAt = new Date().toISOString();
+    item.lastError = null;
+    return result;
+  }
+}
+
+const plaidState = { syncing: false, lastSyncAt: null, lastResult: null, lastChange: null, changeCounter: 0 };
+let plaidSyncPromise = null;
+
+// One sync at a time; concurrent callers share the in-flight run.
+function syncPlaidItems(itemId = null) {
+  if (plaidSyncPromise) return plaidSyncPromise;
+  plaidSyncPromise = (async () => {
+    const totals = { added: 0, updated: 0, removed: 0, skipped: 0, errors: 0 };
+    const store = loadPlaidStore();
+    const items = store.items.filter(i => !itemId || i.itemId === itemId);
+    if (!items.length || !getPlaidConfig()) return totals;
+    plaidState.syncing = true;
+    try {
+      for (const item of items) {
+        try {
+          const r = await syncPlaidItem(item);
+          for (const k of Object.keys(r)) totals[k] += r[k];
+        } catch (err) {
+          item.lastError = { code: err.plaidCode || 'ERROR', message: err.message, at: new Date().toISOString() };
+          totals.errors++;
+          console.error(`Plaid sync failed for ${item.institutionName}:`, err.message);
+        }
+      }
+      savePlaidStore(store);
+      plaidState.lastSyncAt = new Date().toISOString();
+      plaidState.lastResult = totals;
+      if (totals.added || totals.updated || totals.removed) {
+        plaidState.lastChange = { ...totals, at: plaidState.lastSyncAt };
+        plaidState.changeCounter++;
+      }
+    } finally {
+      plaidState.syncing = false;
+    }
+    return totals;
+  })().finally(() => { plaidSyncPromise = null; });
+  return plaidSyncPromise;
+}
+
+// Plaid's first pull for a new Item lands a little after linking; check a few times.
+function schedulePlaidFollowUps() {
+  for (const ms of [8000, 45000, 3 * 60 * 1000]) {
+    setTimeout(() => syncPlaidItems().catch(() => {}), ms).unref();
+  }
+}
+setTimeout(() => syncPlaidItems().catch(() => {}), 5000).unref();
+setInterval(() => syncPlaidItems().catch(() => {}), PLAID_SYNC_INTERVAL_MS).unref();
+
+app.get('/api/plaid/status', (_req, res) => {
+  const settings = loadJSON(SETTINGS_FILE, {});
+  const cfg = getPlaidConfig();
+  res.json({
+    configured: Boolean(cfg),
+    env: cfg ? cfg.env : (settings.plaid?.env || 'sandbox'),
+    clientId: settings.plaid?.clientId || '',
+    syncing: plaidState.syncing,
+    lastSyncAt: plaidState.lastSyncAt,
+    lastResult: plaidState.lastResult,
+    lastChange: plaidState.lastChange,
+    changeCounter: plaidState.changeCounter,
+    syncIntervalMinutes: PLAID_SYNC_INTERVAL_MS / 60000,
+    items: loadPlaidStore().items.map(publicPlaidItem),
+  });
+});
+
+app.post('/api/plaid/settings', async (req, res) => {
+  const clientId = (req.body.clientId || '').trim();
+  const env = req.body.env === 'production' ? 'production' : 'sandbox';
+  const settings = loadJSON(SETTINGS_FILE, {});
+  const secret = (req.body.secret || '').trim() || settings.plaid?.secret;
+  if (!clientId) return res.status(400).json({ error: 'Client ID is required' });
+  if (!secret) return res.status(400).json({ error: 'Secret is required' });
+  settings.plaid = { ...(settings.plaid || {}), clientId, secret, env };
+  saveJSON(SETTINGS_FILE, settings);
+
+  // Cheap call to confirm the keys match the chosen environment
+  let verified = false;
+  try {
+    await plaidPost('/institutions/get', { count: 1, offset: 0, country_codes: PLAID_COUNTRY_CODES });
+    verified = true;
+  } catch (err) {
+    if (err.plaidCode === 'INVALID_API_KEYS') {
+      delete settings.plaid.secret;
+      saveJSON(SETTINGS_FILE, settings);
+      return res.status(400).json({ error: `Plaid rejected these keys for ${env}. Check the client ID, the secret, and that the secret belongs to the ${env} environment.` });
+    }
+  }
+  res.json({ success: true, verified });
+});
+
+// Hosted Link sessions waiting for the user to finish in their browser.
+// The server watches each session itself, so the link completes even if the
+// user wanders off the Settings page (or closes the window) before finishing.
+const pendingLinks = new Map(); // link_token → { itemId, expiresAt, result }
+
+// One look at a Hosted Link session: a result once it's over, null while it's open
+async function checkPlaidLink(token, pending) {
+  const data = await plaidPost('/link/token/get', { link_token: token });
+  let publicToken = null;
+  let finished = false;
+  let exited = false;
+  for (const s of data.link_sessions || []) {
+    publicToken = s.results?.item_add_results?.[0]?.public_token || s.on_success?.public_token || null;
+    if (publicToken) break;
+    if (s.finished_at) { finished = true; if (s.on_exit) exited = true; }
+  }
+  const store = loadPlaidStore();
+
+  if (pending.itemId) {
+    // Update mode: no new token, a finished session means credentials were refreshed
+    const item = store.items.find(i => i.itemId === pending.itemId);
+    if (item && (publicToken || (finished && !exited))) {
+      item.lastError = null;
+      savePlaidStore(store);
+      schedulePlaidFollowUps();
+      return { status: 'linked', item: publicPlaidItem(item) };
+    }
+  } else if (publicToken) {
+    const ex = await plaidPost('/item/public_token/exchange', { public_token: publicToken });
+    const acc = await plaidPost('/accounts/get', { access_token: ex.access_token });
+    const institutionId = acc.item?.institution_id || null;
+    let institutionName = acc.item?.institution_name;
+    if (!institutionName && institutionId) {
+      try {
+        const inst = await plaidPost('/institutions/get_by_id', { institution_id: institutionId, country_codes: PLAID_COUNTRY_CODES });
+        institutionName = inst.institution?.name;
+      } catch {}
+    }
+    institutionName = institutionName || 'Bank';
+    const item = {
+      itemId: ex.item_id,
+      accessToken: ex.access_token,
+      institutionId,
+      institutionName,
+      addedAt: new Date().toISOString(),
+      cursor: null,
+      updateStatus: null,
+      lastSyncAt: null,
+      lastError: null,
+      accounts: (acc.accounts || []).map(a => {
+        const label = `${institutionName} ••${a.mask || a.name}`;
+        return {
+          accountId: a.account_id,
+          name: a.official_name || a.name,
+          mask: a.mask || '',
+          type: a.type,
+          subtype: a.subtype,
+          enabled: a.type === 'credit' || a.type === 'depository',
+          source: label,
+          card: label,
+        };
+      }),
+    };
+    store.items.push(item);
+    savePlaidStore(store);
+    syncPlaidItems().catch(() => {});
+    schedulePlaidFollowUps();
+    return { status: 'linked', item: publicPlaidItem(item) };
+  }
+
+  if (exited) return { status: 'exited' };
+  return null;
+}
+
+function watchPlaidLink(token) {
+  const tick = async () => {
+    const pending = pendingLinks.get(token);
+    if (!pending || pending.result) return;
+    try {
+      const result = await checkPlaidLink(token, pending);
+      if (result) { pending.result = result; return; }
+    } catch (err) {
+      console.error('Plaid link check failed:', err.message); // transient; keep watching until expiry
+    }
+    if (Date.now() > pending.expiresAt) { pending.result = { status: 'expired' }; return; }
+    setTimeout(tick, 3000).unref();
+  };
+  setTimeout(tick, 3000).unref();
+}
+
+// In Electron the server runs in the main process, so it can hand the URL to the system browser itself
+function openInSystemBrowser(url) {
+  if (!isElectron) return false;
+  try { require('electron').shell.openExternal(url); return true; } catch { return false; }
+}
+
+app.post('/api/plaid/link/start', async (req, res) => {
+  const settings = loadJSON(SETTINGS_FILE, {});
+  if (!getPlaidConfig()) return res.status(400).json({ error: "Plaid isn't set up yet — add your client ID and secret first." });
+  if (!settings.plaid.userId) {
+    settings.plaid.userId = crypto.randomUUID();
+    saveJSON(SETTINGS_FILE, settings);
+  }
+  const body = {
+    client_name: 'Prism',
+    language: 'en',
+    country_codes: PLAID_COUNTRY_CODES,
+    user: { client_user_id: settings.plaid.userId },
+    hosted_link: { url_lifetime_seconds: PLAID_LINK_LIFETIME_S },
+  };
+  const itemId = req.body.itemId || null;
+  if (itemId) {
+    // Update mode: refresh credentials on an existing Item
+    const item = loadPlaidStore().items.find(i => i.itemId === itemId);
+    if (!item) return res.status(404).json({ error: 'Unknown bank connection' });
+    body.access_token = item.accessToken;
+  } else {
+    body.products = ['transactions'];
+    body.transactions = { days_requested: PLAID_HISTORY_DAYS };
+  }
+  try {
+    const data = await plaidPost('/link/token/create', body);
+    for (const [token, p] of pendingLinks) if (Date.now() > p.expiresAt + 3600000) pendingLinks.delete(token);
+    const expiresAt = Date.parse(data.expiration) || Date.now() + PLAID_LINK_LIFETIME_S * 1000;
+    pendingLinks.set(data.link_token, { itemId, expiresAt, result: null });
+    watchPlaidLink(data.link_token);
+    const opened = openInSystemBrowser(data.hosted_link_url);
+    res.json({ linkToken: data.link_token, url: data.hosted_link_url, expiration: data.expiration, opened });
+  } catch (err) {
+    plaidErrorResponse(res, err);
+  }
+});
+
+app.get('/api/plaid/link/status/:token', (req, res) => {
+  const pending = pendingLinks.get(req.params.token);
+  if (!pending) return res.status(404).json({ error: 'Unknown link session' });
+  res.json(pending.result || { status: 'pending' });
+});
+
+app.post('/api/plaid/sync', async (req, res) => {
+  if (!getPlaidConfig()) return res.status(400).json({ error: "Plaid isn't set up yet." });
+  try {
+    const totals = await syncPlaidItems(req.body.itemId || null);
+    res.json({ ...totals, changeCounter: plaidState.changeCounter });
+  } catch (err) {
+    plaidErrorResponse(res, err);
+  }
+});
+
+app.put('/api/plaid/items/:itemId/accounts/:accountId', (req, res) => {
+  const store = loadPlaidStore();
+  const item = store.items.find(i => i.itemId === req.params.itemId);
+  const account = item && item.accounts.find(a => a.accountId === req.params.accountId);
+  if (!account) return res.status(404).json({ error: 'Unknown account' });
+  if (typeof req.body.enabled === 'boolean') account.enabled = req.body.enabled;
+  if (typeof req.body.card === 'string') {
+    const card = req.body.card.trim().slice(0, 60);
+    const transactions = loadJSON(TRANSACTIONS_FILE, []);
+    for (const t of transactions) {
+      if (t.plaidAccountId === account.accountId) { if (card) t.card = card; else delete t.card; }
+    }
+    saveJSON(TRANSACTIONS_FILE, transactions);
+    account.card = card;
+  }
+  savePlaidStore(store);
+  res.json({ success: true, account });
+});
+
+app.delete('/api/plaid/items/:itemId', async (req, res) => {
+  const store = loadPlaidStore();
+  const idx = store.items.findIndex(i => i.itemId === req.params.itemId);
+  if (idx === -1) return res.status(404).json({ error: 'Unknown bank connection' });
+  const item = store.items[idx];
+  try {
+    await plaidPost('/item/remove', { access_token: item.accessToken });
+  } catch (err) {
+    // Still drop it locally; Plaid keeps an orphaned Item at worst
+    console.error('Plaid item/remove failed:', err.message);
+  }
+  store.items.splice(idx, 1);
+  savePlaidStore(store);
+
+  let removedTransactions = 0;
+  if (req.query.deleteTransactions === '1') {
+    const ids = new Set(item.accounts.map(a => a.accountId));
+    const transactions = loadJSON(TRANSACTIONS_FILE, []);
+    const next = transactions.filter(t => !ids.has(t.plaidAccountId));
+    removedTransactions = transactions.length - next.length;
+    saveJSON(TRANSACTIONS_FILE, next);
+  }
+  plaidState.changeCounter++;
+  res.json({ success: true, removedTransactions });
+});
 
 app.get('/api/version', (_req, res) => {
   try { res.json({ version: require('./package.json').version || '0.0.0' }); }

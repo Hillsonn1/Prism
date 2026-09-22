@@ -1942,3 +1942,83 @@ select:focus {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ---- Bank Sync (Plaid) ---- */
+.plaid-badge { background: #e0f2fe; color: #0369a1; }
+.plaid-keys-grid {
+  display: grid;
+  grid-template-columns: 190px 1fr 1fr auto;
+  gap: .75rem;
+  align-items: center;
+}
+.plaid-keys-grid select { width: 100%; }
+.plaid-connections-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  margin: 1.5rem 0 .75rem;
+}
+.plaid-subtitle { font-size: .95rem; font-weight: 600; margin: 0; }
+#plaid-sync-note { font-size: .8rem; }
+.plaid-item {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+  margin-bottom: .75rem;
+}
+.plaid-item.has-error { border-color: #fecaca; background: #fff7f7; }
+.plaid-item-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.plaid-item-name { font-weight: 600; }
+.plaid-item-meta { font-size: .8rem; margin-top: .15rem; }
+.plaid-item-actions { display: flex; gap: .5rem; flex-wrap: wrap; }
+.plaid-accounts { margin-top: .75rem; display: flex; flex-direction: column; gap: .5rem; }
+.plaid-account { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.plaid-account-toggle {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex: 1;
+  min-width: 220px;
+  cursor: pointer;
+  font-size: .9rem;
+}
+.plaid-account-toggle input { accent-color: var(--primary); }
+.plaid-account input[type="text"] { flex: 1; min-width: 180px; }
+.plaid-link-wait {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  flex-wrap: wrap;
+  margin-top: 1rem;
+  padding: .75rem 1rem;
+  background: var(--bg);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  font-size: .9rem;
+}
+.plaid-link-wait-msg { flex: 1; min-width: 240px; }
+.txn-pending-badge {
+  display: inline-block;
+  margin-top: .2rem;
+  margin-left: .3rem;
+  font-size: .68rem;
+  padding: .05rem .45rem;
+  border-radius: 999px;
+  border: 1px solid #fde68a;
+  color: #b45309;
+  background: #fffbeb;
+  white-space: nowrap;
+}
+.upload-alt { margin-top: .75rem; font-size: .85rem; }
+.upload-alt a { color: var(--primary); text-decoration: none; }
+.upload-alt a:hover { text-decoration: underline; }
+@media (max-width: 860px) {
+  .plaid-keys-grid { grid-template-columns: 1fr; }
+}

@@ -179,6 +179,7 @@
             <div class="upload-icon">📄</div>
             <h2>Drop your statement here</h2>
             <p>CSV or PDF files from your bank or credit card</p>
+            <p class="muted upload-alt">Or <a href="#" onclick="switchView('settings');return false">connect your bank with Plaid</a> and purchases come in on their own.</p>
             <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
               Choose File
             </button>
@@ -248,6 +249,45 @@
               Stored only on your computer, never shared.
             </p>
           </div>
+        </div>
+        <div class="card">
+          <div class="card-title-row">
+            <h2 class="card-title" style="margin-bottom:0">Bank Sync <span class="ai-badge plaid-badge">Plaid</span></h2>
+            <div id="plaid-status"></div>
+          </div>
+          <p class="muted" style="margin:1rem 0 1.25rem">
+            Connect a bank or credit card through Plaid and new purchases show up on their own — no statements to upload.
+            Prism checks for new transactions when it opens and every 15 minutes while it's running.
+            Plaid covers US banks; other accounts can still be imported from statements.
+          </p>
+          <div class="settings-form">
+            <label class="settings-label">Plaid API keys</label>
+            <div class="plaid-keys-grid">
+              <select id="plaid-env">
+                <option value="sandbox">Sandbox (test banks)</option>
+                <option value="production">Production (real banks)</option>
+              </select>
+              <input type="text" id="plaid-client-id" placeholder="Client ID" autocomplete="off" style="font-family:monospace" />
+              <input type="password" id="plaid-secret" placeholder="Secret" autocomplete="off" style="font-family:monospace" />
+              <button class="btn btn-primary" onclick="savePlaidSettings()">Save Keys</button>
+            </div>
+            <p class="settings-hint">
+              Get keys at <strong>dashboard.plaid.com</strong> → Developers → Keys. Each environment has its own secret.
+              In Sandbox, pick any bank and sign in with <code>user_good</code> / <code>pass_good</code>.
+              Stored only on your computer, never shared.
+            </p>
+          </div>
+          <div class="plaid-connections-head">
+            <h3 class="plaid-subtitle">Connected banks</h3>
+            <span id="plaid-sync-note" class="muted"></span>
+          </div>
+          <div id="plaid-connections"></div>
+          <div id="plaid-link-wait" class="plaid-link-wait" style="display:none">
+            <span class="plaid-link-wait-msg">Finish connecting in your browser — this page updates on its own when you're done.</span>
+            <a id="plaid-link-open" class="btn btn-sm btn-secondary" href="#" target="_blank" rel="noopener">Didn't open? Open Plaid</a>
+            <button class="btn btn-sm btn-secondary" onclick="plaidCancelLink()">Cancel</button>
+          </div>
+          <button class="btn btn-primary" id="plaid-connect-btn" onclick="plaidConnect()" style="margin-top:1rem">+ Connect a bank</button>
         </div>
         <div class="card">
           <h2 class="card-title">Cards</h2>
