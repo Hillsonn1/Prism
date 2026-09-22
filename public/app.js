@@ -21,7 +21,7 @@ async function checkForUpdate() {
     const local  = await fetch('/api/version').then(r => r.json());
     if (!remote.version || !local.version) return;
     if (!semverGt(remote.version, local.version)) return;
-    if (localStorage.getItem('prism_dismissed_update') === remote.version) return;
+    if (state.prefs.dismissedUpdate === remote.version) return;
     const bar = document.getElementById('update-bar');
     if (!bar) return;
     bar.dataset.version = remote.version;
@@ -36,7 +36,7 @@ async function checkForUpdate() {
 function dismissUpdateBanner() {
   const bar = document.getElementById('update-bar');
   if (!bar) return;
-  if (bar.dataset.version) localStorage.setItem('prism_dismissed_update', bar.dataset.version);
+  if (bar.dataset.version) savePrefs({ dismissedUpdate: bar.dataset.version });
   bar.style.display = 'none';
 }
 
@@ -70,6 +70,7 @@ const state = {
   anomaliesCache: {},
   dismissedAnomalies: new Set(),
   hasApiKey: false,
+  prefs: {},
   groupByVendor: false,
   expandedMerchants: new Set(),
   jumpToCategory: null,
@@ -157,8 +158,16 @@ async function loadAll() {
   state.merchants = merchants && typeof merchants === 'object' ? merchants : {};
   state.budgets = settings.budgets || {};
   state.hasApiKey = !!settings.hasApiKey;
+  state.prefs = settings.prefs || {};
+  state.dismissedAnomalies = new Set(state.prefs.dismissedAnomalies || []);
   state.txVersion++;
   clearDashboardCaches();
+}
+
+// UI preferences live with the data on the server (see /api/prefs)
+async function savePrefs(patch) {
+  Object.assign(state.prefs, patch);
+  try { await api('PUT', '/api/prefs', patch); } catch {}
 }
 
 // ---- Navigation ----
@@ -488,7 +497,7 @@ function displayAnomalies(anomalies) {
 
 function dismissAnomaly(i, key) {
   state.dismissedAnomalies.add(key);
-  try { localStorage.setItem('prism_dismissed_anomalies', JSON.stringify([...state.dismissedAnomalies])); } catch {}
+  savePrefs({ dismissedAnomalies: [...state.dismissedAnomalies] });
   const row = document.getElementById(`anomaly-row-${i}`);
   if (row) row.remove();
   const card = document.getElementById('anomalies-card');
@@ -2870,19 +2879,13 @@ async function pollPlaidChanges() {
 // ---- Init ----
 (async () => {
   try {
-    const saved = JSON.parse(localStorage.getItem('prism_dismissed_anomalies') || '[]');
-    state.dismissedAnomalies = new Set(saved);
-  } catch {}
-
-  checkForUpdate();
-
-  try {
     await loadAll();
   } catch (err) {
     const el = document.getElementById('dashboard-empty');
     if (el) el.innerHTML = `<p style="color:#ef4444;font-weight:600">Failed to load data — is the server running?<br><small>${esc(err.message)}</small></p>`;
   }
   renderDashboard();
+  checkForUpdate();
   pollPlaidChanges();
   setInterval(pollPlaidChanges, 60000);
 })();

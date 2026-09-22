@@ -1,28 +1,48 @@
+'use strict';
 const { app, BrowserWindow, shell } = require('electron');
 const path = require('path');
-const http = require('http');
+const { start, logCrashes } = require('../src/server');
 
-const PORT = 3000;
 let mainWindow;
 
-function waitForServer(maxAttempts = 30) {
-  return new Promise((resolve, reject) => {
-    let attempts = 0;
-    const check = () => {
-      http.get(`http://localhost:${PORT}/`, () => resolve())
-        .on('error', () => {
-          if (++attempts >= maxAttempts) return reject(new Error('Server did not start in time'));
-          setTimeout(check, 300);
-        });
-    };
-    setTimeout(check, 300);
+// A second launch just focuses the existing window instead of starting a second server
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return;
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
   });
+
+  app.whenReady().then(async () => {
+    const dataDir = app.getPath('userData');
+    logCrashes(dataDir);
+    let url;
+    try {
+      ({ url } = await start({
+        dataDir,
+        uploadsDir: path.join(app.getPath('temp'), 'PrismUploads'),
+        port: 0,
+        openExternal: target => { shell.openExternal(target); return true; },
+      }));
+    } catch (err) {
+      console.error('Failed to start server:', err.message);
+      app.quit();
+      return;
+    }
+    createWindow(url);
+  });
+
+  app.on('window-all-closed', () => app.quit());
 }
 
-function createWindow() {
+function createWindow(url) {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 900,
+    minWidth: 720,
+    minHeight: 560,
     title: 'Prism',
     icon: path.join(__dirname, '..', 'build', process.platform === 'darwin' ? 'icon.icns' : 'icon.ico'),
     autoHideMenuBar: true,
@@ -31,27 +51,11 @@ function createWindow() {
       contextIsolation: true,
     },
   });
-
-  mainWindow.loadURL(`http://localhost:${PORT}`);
-
-  // Open any target="_blank" links in the system browser, not a new Electron window
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    shell.openExternal(url);
+  mainWindow.loadURL(url);
+  // Links that open a new window (Plaid, download page) go to the system browser
+  mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {
+    shell.openExternal(target);
     return { action: 'deny' };
   });
+  mainWindow.on('closed', () => { mainWindow = null; });
 }
-
-app.whenReady().then(async () => {
-  if (!process.env.ELECTRON_USER_DATA) process.env.ELECTRON_USER_DATA = app.getPath('userData');
-  require('../server');
-
-  try {
-    await waitForServer();
-    createWindow();
-  } catch (err) {
-    console.error('Failed to start server:', err.message);
-    app.quit();
-  }
-});
-
-app.on('window-all-closed', () => app.quit());
