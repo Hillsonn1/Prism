@@ -17,10 +17,10 @@ const HISTORY_DAYS = 90;          // history pulled when a bank is first linked
 const LINK_LIFETIME_S = 60 * 60;  // how long a Hosted Link page stays valid
 const LIABILITIES_TTL_MS = 6 * 3600 * 1000; // Plaid refreshes liabilities about daily
 
-function getConfig(store) {
+function getConfig(store, secrets = null) {
   const p = store.read('settings').plaid || {};
   if (!p.clientId || !p.secret) return null;
-  return { clientId: p.clientId, secret: p.secret, env: p.env === 'production' ? 'production' : 'sandbox' };
+  return { clientId: p.clientId, secret: secrets ? secrets.open(p.secret) : p.secret, env: p.env === 'production' ? 'production' : 'sandbox' };
 }
 
 // What the UI is allowed to see — never the access token
@@ -68,7 +68,8 @@ async function httpRequest(cfg, endpoint, body) {
   return data;
 }
 
-function createPlaid({ store, openExternal = null, log = console, request = httpRequest }) {
+function createPlaid({ store, openExternal = null, log = console, request = httpRequest, secrets = { seal: v => v, open: v => v, available: false } }) {
+  const token = item => secrets.open(item.accessToken);
   const state = { syncing: false, lastSyncAt: null, lastResult: null, lastChange: null, changeCounter: 0 };
 
   // Items belong to the environment they were linked in; a Sandbox connection
@@ -88,7 +89,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
   const timers = [];
 
   async function post(endpoint, body) {
-    const cfg = getConfig(store);
+    const cfg = getConfig(store, secrets);
     if (!cfg) {
       const err = new Error("Plaid isn't set up yet — add your client ID and secret in Settings.");
       err.status = 400;
@@ -196,7 +197,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       const updates = { added: [], modified: [], removed: [] };
       try {
         for (;;) {
-          const body = { access_token: item.accessToken, count: 500, options: { include_personal_finance_category: true } };
+          const body = { access_token: token(item), count: 500, options: { include_personal_finance_category: true } };
           if (cursor) body.cursor = cursor;
           const page = await post('/transactions/sync', body);
           updates.added.push(...(page.added || []));
@@ -226,7 +227,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
     if (!force && item.liabilitiesAt && Date.now() - Date.parse(item.liabilitiesAt) < LIABILITIES_TTL_MS) return;
     let data;
     try {
-      data = await post('/liabilities/get', { access_token: item.accessToken });
+      data = await post('/liabilities/get', { access_token: token(item) });
     } catch (err) {
       item.liabilitiesError = err.plaidCode || 'ERROR';
       item.liabilitiesAt = new Date().toISOString();
@@ -344,7 +345,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       institutionName = institutionName || 'Bank';
       const item = {
         itemId: ex.item_id,
-        accessToken: ex.access_token,
+        accessToken: secrets.seal(ex.access_token),
         env: getConfig(store).env,
         institutionId,
         institutionName,
@@ -421,10 +422,10 @@ function createPlaid({ store, openExternal = null, log = console, request = http
     const clientId = String(req.body.clientId || '').trim();
     const env = req.body.env === 'production' ? 'production' : 'sandbox';
     const settings = store.read('settings');
-    const secret = String(req.body.secret || '').trim() || settings.plaid?.secret;
+    const secret = String(req.body.secret || '').trim() || (settings.plaid?.secret ? secrets.open(settings.plaid.secret) : '');
     if (!clientId) return res.status(400).json({ error: 'Client ID is required' });
     if (!secret) return res.status(400).json({ error: 'Secret is required' });
-    settings.plaid = { ...(settings.plaid || {}), clientId, secret, env };
+    settings.plaid = { ...(settings.plaid || {}), clientId, secret: secrets.seal(secret), env };
     store.write('settings', settings);
 
     // Cheap call to confirm the keys match the chosen environment
@@ -461,7 +462,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       // Update mode: refresh credentials on an existing Item
       const item = store.read('plaid').items.find(i => i.itemId === itemId);
       if (!item) return res.status(404).json({ error: 'Unknown bank connection' });
-      body.access_token = item.accessToken;
+      body.access_token = token(item);
     } else {
       body.products = ['transactions'];
       body.optional_products = ['liabilities']; // statement balance and due date, where the bank supports it
@@ -522,7 +523,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
     if (idx === -1) return res.status(404).json({ error: 'Unknown bank connection' });
     const item = data.items[idx];
     try {
-      await post('/item/remove', { access_token: item.accessToken });
+      await post('/item/remove', { access_token: token(item) });
     } catch (err) {
       log.error('Plaid item/remove failed:', err.message); // still drop it locally
     }

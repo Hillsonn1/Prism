@@ -1,9 +1,12 @@
 'use strict';
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, safeStorage } = require('electron');
 const path = require('path');
 const { start, logCrashes } = require('../src/server');
 
 let mainWindow;
+
+// PRISM_DATA_DIR points the app at another data folder (development, tests)
+if (process.env.PRISM_DATA_DIR) app.setPath('userData', process.env.PRISM_DATA_DIR);
 
 // A second launch just focuses the existing window instead of starting a second server
 if (!app.requestSingleInstanceLock()) {
@@ -26,6 +29,7 @@ if (!app.requestSingleInstanceLock()) {
         port: 0,
         openExternal: target => { shell.openExternal(target); return true; },
         openFolder: dir => shell.openPath(dir),
+        safeStorage,
       }));
     } catch (err) {
       console.error('Failed to start server:', err.message);

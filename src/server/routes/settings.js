@@ -18,7 +18,7 @@ function semverGt(a, b) {
   return false;
 }
 
-module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, openFolder = null }) {
+module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, openFolder = null, secrets }) {
   const router = express.Router();
 
   router.get('/version', (_req, res) => res.json({ version }));
@@ -27,6 +27,7 @@ module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, 
     res.json({
       version,
       dataDir,
+      encrypted: secrets.available,
       transactions: store.read('transactions').length,
       backups: store.backups('transactions').length,
       canOpen: Boolean(openFolder),
@@ -83,7 +84,7 @@ module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, 
 
   router.post('/settings', route((req, res) => {
     const key = str(req.body.anthropicApiKey, { field: 'anthropicApiKey', max: 300, required: true });
-    store.update('settings', s => { s.anthropicApiKey = key; });
+    store.update('settings', s => { s.anthropicApiKey = secrets.seal(key); });
     res.json({ success: true });
   }));
 

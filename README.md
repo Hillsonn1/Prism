@@ -8,6 +8,8 @@ A local-first spending tracker for people with US and Israeli cards. Runs as a d
 - **Dollars and shekels** — dollars are what everything is computed from; a shekel purchase keeps its ₪ amount beside the dollar figure, converted at the day's ECB rate (cached, with a manual override for offline use).
 - **Dashboard, budget, insights** — spending by category and month, recurring charges, possible duplicates, budget targets, and plain-language observations computed locally.
 - **Clean-up tools** — merge duplicate merchants after reviewing the proposals, normalize names, drop card payments.
+- **Cards & bills** — statement balance, minimum, due date and paid/overdue status per card (Plaid Liabilities).
+- Plaid tokens and API keys are encrypted at rest with the OS keychain in the desktop app.
 - Dark mode, in-app dialogs, keyboard-friendly.
 
 ## Running it
@@ -15,7 +17,7 @@ A local-first spending tracker for people with US and Israeli cards. Runs as a d
 ```bash
 npm install
 npm start          # web app at http://localhost:3000, data in ./data
-npm run dev        # desktop app (Electron), data in the OS app-data folder
+npm run dev        # desktop app (Electron), data in the OS app-data folder (PRISM_DATA_DIR overrides)
 npm test           # unit + API tests (node --test)
 ```
 

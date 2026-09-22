@@ -8,6 +8,7 @@ const express = require('express');
 const { Store } = require('./storage');
 const { createPlaid } = require('./plaid');
 const { createFx } = require('./fx');
+const { createSecrets } = require('./secrets');
 const { toTitleCase } = require('./normalize');
 
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
@@ -27,14 +28,16 @@ function migrate(store) {
   }
 }
 
-function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null, log = console }) {
+function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null, safeStorage = null, log = console }) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(uploadsDir, { recursive: true });
   const store = new Store(dataDir);
   migrate(store);
+  const secrets = createSecrets(safeStorage);
+  secrets.migrate(store);
 
-  const apiKey = () => store.read('settings').anthropicApiKey || null;
-  const plaid = createPlaid({ store, openExternal, log });
+  const apiKey = () => secrets.open(store.read('settings').anthropicApiKey) || null;
+  const plaid = createPlaid({ store, openExternal, log, secrets });
   const fx = createFx({ store, log });
 
   const app = express();
@@ -44,7 +47,7 @@ function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null
   app.use('/api', require('./routes/transactions')({ store, plaid, fx }));
   app.use('/api', require('./routes/import')({ store, uploadsDir, apiKey, fx }));
   app.use('/api', require('./routes/budget')({ store, apiKey }));
-  app.use('/api', require('./routes/settings')({ store, version, apiKey, fx, dataDir, openFolder }));
+  app.use('/api', require('./routes/settings')({ store, version, apiKey, fx, dataDir, openFolder, secrets }));
   app.use('/api/plaid', plaid.router);
   app.use('/api', (req, res) => res.status(404).json({ error: `No such endpoint: ${req.method} ${req.path}` }));
   // eslint-disable-next-line no-unused-vars
