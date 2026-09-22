@@ -2146,15 +2146,26 @@ function mapPlaidCategory(pfc) {
   return PLAID_CATEGORY_MAP[pfc.detailed] || PLAID_CATEGORY_MAP[pfc.primary] || null;
 }
 
+// Card payments as banks describe them, beyond what PAYMENT_RE (tuned for
+// statement rows) catches — e.g. Chase's "AUTOMATIC PAYMENT - THANK YOU"
+const PLAID_PAYMENT_RE = /\b(automatic|auto|online|mobile|internet|scheduled|recurring)\s+payment\b|\bpayment\b[\s\-–—.,*]*thank/i;
+
 // Payments, transfers and income aren't spending. Refunds stay in as negative
 // amounts, the same way statement imports treat credits.
-function isPlaidSpend(p) {
+function isPlaidSpend(p, account) {
   const primary = p.personal_finance_category?.primary || '';
   const detailed = p.personal_finance_category?.detailed || '';
   if (primary === 'TRANSFER_IN' || primary === 'TRANSFER_OUT' || primary === 'INCOME') return false;
   if (detailed === 'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT') return false;
-  const name = p.merchant_name || p.name || '';
-  return !PAYMENT_RE.test(name.replace(/[\s\-.,*]+$/, ''));
+  // On a credit card, a "loan payment" is the card itself being paid off
+  if (primary === 'LOAN_PAYMENTS' && account.type === 'credit') return false;
+  // Name checks only for money coming in: a payment never posts as a charge,
+  // and this keeps merchants like "Payment Processing Inc" out of the net
+  if (p.amount >= 0) return true;
+  return ![p.name, p.merchant_name].filter(Boolean).some(n => {
+    const clean = n.replace(/[\s\-.,*]+$/, '');
+    return PAYMENT_RE.test(clean) || PLAID_PAYMENT_RE.test(clean);
+  });
 }
 
 // Purchase date rather than posting date, so a charge keeps its date when it settles
@@ -2187,7 +2198,7 @@ async function applyPlaidUpdates(item, { added, modified, removed }) {
     const account = accounts[p.account_id];
     if (!account || !account.enabled || knownIds.has(p.transaction_id)) continue;
     if (p.pending_transaction_id && knownIds.has(p.pending_transaction_id)) { rekeys.push(p); continue; }
-    if (!isPlaidSpend(p)) { result.skipped++; continue; }
+    if (!isPlaidSpend(p, account)) { result.skipped++; continue; }
 
     const amount = plaidAmount(p);
     const date = plaidTxnDate(p);
@@ -2220,6 +2231,7 @@ async function applyPlaidUpdates(item, { added, modified, removed }) {
       importedAt: new Date().toISOString(),
       plaidId: p.transaction_id,
       plaidAccountId: p.account_id,
+      plaidCategory: p.personal_finance_category?.detailed || undefined,
       ...(p.pending ? { pending: true } : {}),
     });
   }
