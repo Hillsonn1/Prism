@@ -14,6 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Keep version.json in step with package.json so a site-only push can
+      # never roll the advertised version back behind the latest release.
+      - name: Write version.json
+        run: node scripts/write-version.js
+
       - name: Install Netlify CLI
         run: npm install -g netlify-cli
 
