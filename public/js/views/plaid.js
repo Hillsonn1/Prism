@@ -38,41 +38,59 @@ async function renderPlaidSettings() {
     return;
   }
   const note = s.syncing ? 'Syncing…' : s.lastSyncAt ? `Last checked ${fmtAgo(s.lastSyncAt)} · every ${s.syncIntervalMinutes} min` : '';
-  list.innerHTML = html`${note ? html`<p class="muted plaid-sync-note">${note}</p>` : ''}${s.items.map(renderPlaidItem)}`;
+  list.innerHTML = html`${note ? html`<p class="muted plaid-sync-note">${note}</p>` : ''}${s.items.map(item => renderPlaidItem(item, s.env))}`;
   renderSidebarFooter(s);
 }
 
-function renderPlaidItem(item) {
+function renderPlaidItem(item, env) {
+  if (env && item.env && item.env !== env) {
+    return html`
+      <div class="plaid-item plaid-item-inactive">
+        <div class="plaid-item-head">
+          <div>
+            <div class="plaid-item-name">${item.institutionName} <span class="key-status free">${item.env === 'sandbox' ? 'Sandbox' : 'Production'} connection</span></div>
+            <div class="muted plaid-item-meta">Paused while your keys are set to ${env === 'sandbox' ? 'Sandbox' : 'Production'}. Its transactions stay.</div>
+          </div>
+          <div class="plaid-item-actions">
+            <button class="btn btn-sm btn-secondary" onclick="plaidDisconnect('${escAttr(item.itemId)}','${escAttr(item.institutionName)}')">Disconnect</button>
+          </div>
+        </div>
+      </div>`;
+  }
   const err = item.lastError;
   const historyPending = !err && item.updateStatus && item.updateStatus !== 'HISTORICAL_UPDATE_COMPLETE';
-  const meta = err ? `⚠️ ${esc(err.message)}`
+  const meta = err ? html`${icon('alert')} ${err.message}`
     : !item.lastSyncAt ? 'Waiting for first sync…'
     : historyPending ? `Synced ${fmtAgo(item.lastSyncAt)} · Plaid is still pulling history`
     : `Synced ${fmtAgo(item.lastSyncAt)}`;
-  const accounts = item.accounts.map(a => `
-    <div class="plaid-account">
+  const accountRow = a => html`
+    <div class="plaid-account ${a.enabled ? '' : 'plaid-account-off'}">
       <label class="plaid-account-toggle">
-        <input type="checkbox" ${a.enabled ? 'checked' : ''}
-          onchange="plaidUpdateAccount('${escAttr(item.itemId)}','${escAttr(a.accountId)}',{enabled:this.checked})" />
-        <span>${esc(a.name)} <span class="muted">••${esc(a.mask)}</span></span>
+        <input type="checkbox" ${a.enabled ? 'checked' : ''} onchange="plaidUpdateAccount('${escAttr(item.itemId)}','${escAttr(a.accountId)}',{enabled:this.checked})" />
+        <span>${a.name} <span class="muted">••${a.mask}</span>${a.liability?.nextPaymentDueDate ? html` <span class="muted plaid-due">· due ${fmtDate(a.liability.nextPaymentDueDate)}</span>` : ''}</span>
       </label>
-      <input type="text" value="${esc(a.card || '')}" placeholder="Card nickname" list="card-suggestions"
+      <input type="text" value="${a.card || ''}" placeholder="Card nickname" list="card-suggestions" aria-label="Card nickname"
         onchange="plaidUpdateAccount('${escAttr(item.itemId)}','${escAttr(a.accountId)}',{card:this.value})" />
-    </div>`).join('');
-  return `
+    </div>`;
+  const on = item.accounts.filter(a => a.enabled);
+  const off = item.accounts.filter(a => !a.enabled);
+  return html`
     <div class="plaid-item${err ? ' has-error' : ''}">
       <div class="plaid-item-head">
         <div>
-          <div class="plaid-item-name">${esc(item.institutionName)}</div>
+          <div class="plaid-item-name">${item.institutionName}</div>
           <div class="muted plaid-item-meta">${meta}</div>
         </div>
         <div class="plaid-item-actions">
-          ${err ? `<button class="btn btn-sm btn-primary" onclick="plaidConnect('${escAttr(item.itemId)}')">Reconnect</button>` : ''}
-          <button class="btn btn-sm btn-secondary" onclick="plaidSyncNow('${escAttr(item.itemId)}')">Sync now</button>
-          <button class="btn btn-sm btn-danger" onclick="plaidDisconnect('${escAttr(item.itemId)}','${escAttr(item.institutionName)}')">Disconnect</button>
+          ${err ? html`<button class="btn btn-sm btn-primary" onclick="plaidConnect('${escAttr(item.itemId)}')">Reconnect</button>` : ''}
+          <button class="btn btn-sm btn-secondary" onclick="plaidSyncNow('${escAttr(item.itemId)}')">${icon('refresh')} Sync now</button>
+          <button class="btn btn-sm btn-secondary" onclick="plaidDisconnect('${escAttr(item.itemId)}','${escAttr(item.institutionName)}')">Disconnect</button>
         </div>
       </div>
-      <div class="plaid-accounts">${accounts}</div>
+      <div class="plaid-accounts">
+        ${on.map(accountRow)}
+        ${off.length ? html`<details class="plaid-more"><summary class="muted">${plural(off.length, 'account')} not synced (loans, investments, savings…)</summary>${off.map(accountRow)}</details>` : ''}
+      </div>
     </div>`;
 }
 

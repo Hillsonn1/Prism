@@ -74,6 +74,17 @@ http.createServer((req, res) => {
         if (body.access_token !== 'access-mock') return json(400, { error_code: 'INVALID_ACCESS_TOKEN', error_message: 'bad token' });
         return json(200, { accounts: ACCOUNTS, ...sync(body.cursor) });
       case '/item/remove': return json(200, { removed: true });
+      case '/liabilities/get': {
+        const soon = new Date(Date.now() + 6 * 86400000).toISOString().slice(0, 10);
+        return json(200, {
+          accounts: ACCOUNTS.map(a => ({ ...a, balances: { current: a.type === 'credit' ? 1266.77 : 4210.5, available: a.type === 'credit' ? 8733.23 : 4210.5, limit: a.type === 'credit' ? 10000 : null } })),
+          liabilities: { credit: [{
+            account_id: 'acc-card', is_overdue: false, last_payment_amount: 980.12, last_payment_date: day(28),
+            last_statement_issue_date: day(3), last_statement_balance: 1266.77, minimum_payment_amount: 40,
+            next_payment_due_date: soon, aprs: [{ apr_percentage: 24.99, apr_type: 'purchase_apr' }],
+          }] },
+        });
+      }
       case '/hosted/link-mock-token':
         res.writeHead(200, { 'Content-Type': 'text/html' });
         return res.end('<h1>Mock Plaid Link</h1><form method="POST" action="/mock/finish"><button>Finish linking</button></form>');

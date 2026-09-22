@@ -15,6 +15,7 @@ const COUNTRY_CODES = ['US'];
 const SYNC_INTERVAL_MS = 15 * 60 * 1000;
 const HISTORY_DAYS = 90;          // history pulled when a bank is first linked
 const LINK_LIFETIME_S = 60 * 60;  // how long a Hosted Link page stays valid
+const LIABILITIES_TTL_MS = 6 * 3600 * 1000; // Plaid refreshes liabilities about daily
 
 function getConfig(store) {
   const p = store.read('settings').plaid || {};
@@ -69,6 +70,19 @@ async function httpRequest(cfg, endpoint, body) {
 
 function createPlaid({ store, openExternal = null, log = console, request = httpRequest }) {
   const state = { syncing: false, lastSyncAt: null, lastResult: null, lastChange: null, changeCounter: 0 };
+
+  // Items belong to the environment they were linked in; a Sandbox connection
+  // can't sync with Production keys, so it's set aside rather than failing.
+  function itemsForCurrentEnv() {
+    const cfg = getConfig(store);
+    const data = store.read('plaid');
+    let changed = false;
+    for (const item of data.items) {
+      if (!item.env && cfg) { item.env = cfg.env; changed = true; } // linked before environments were recorded
+    }
+    if (changed) store.write('plaid', data);
+    return { data, active: cfg ? data.items.filter(i => i.env === cfg.env) : [] };
+  }
   const pendingLinks = new Map(); // link_token → { itemId, expiresAt, result }
   let syncPromise = null;
   const timers = [];
@@ -206,20 +220,55 @@ function createPlaid({ store, openExternal = null, log = console, request = http
     }
   }
 
+  // Statement balance, due date and minimum payment for each credit card.
+  // Never fails the sync: banks that don't support it just show nothing.
+  async function refreshLiabilities(item, { force = false } = {}) {
+    if (!force && item.liabilitiesAt && Date.now() - Date.parse(item.liabilitiesAt) < LIABILITIES_TTL_MS) return;
+    let data;
+    try {
+      data = await post('/liabilities/get', { access_token: item.accessToken });
+    } catch (err) {
+      item.liabilitiesError = err.plaidCode || 'ERROR';
+      item.liabilitiesAt = new Date().toISOString();
+      return;
+    }
+    const balances = Object.fromEntries((data.accounts || []).map(a => [a.account_id, a.balances || {}]));
+    const credit = Object.fromEntries((data.liabilities?.credit || []).map(c => [c.account_id, c]));
+    for (const account of item.accounts) {
+      const b = balances[account.accountId];
+      if (b) account.balance = { current: b.current ?? null, available: b.available ?? null, limit: b.limit ?? null };
+      const c = credit[account.accountId];
+      if (!c) continue;
+      account.liability = {
+        nextPaymentDueDate: c.next_payment_due_date || null,
+        minimumPaymentAmount: c.minimum_payment_amount ?? null,
+        lastStatementBalance: c.last_statement_balance ?? null,
+        lastStatementIssueDate: c.last_statement_issue_date || null,
+        lastPaymentAmount: c.last_payment_amount ?? null,
+        lastPaymentDate: c.last_payment_date || null,
+        isOverdue: Boolean(c.is_overdue),
+        apr: (c.aprs || []).find(a => a.apr_type === 'purchase_apr')?.apr_percentage ?? null,
+      };
+    }
+    item.liabilitiesError = null;
+    item.liabilitiesAt = new Date().toISOString();
+  }
+
   // One sync at a time; concurrent callers share the in-flight run.
   function syncItems(itemId = null) {
     if (syncPromise) return syncPromise;
     syncPromise = (async () => {
       const totals = { added: 0, updated: 0, removed: 0, skipped: 0, errors: 0 };
-      const data = store.read('plaid');
-      const items = data.items.filter(i => !itemId || i.itemId === itemId);
-      if (!items.length || !getConfig(store)) return totals;
+      const { data, active } = itemsForCurrentEnv();
+      const items = active.filter(i => !itemId || i.itemId === itemId);
+      if (!items.length) return totals;
       state.syncing = true;
       try {
         for (const item of items) {
           try {
             const r = await syncItem(item);
             for (const k of Object.keys(r)) totals[k] += r[k];
+            await refreshLiabilities(item, { force: itemId !== null });
           } catch (err) {
             item.lastError = { code: err.plaidCode || 'ERROR', message: err.message, at: new Date().toISOString() };
             totals.errors++;
@@ -296,6 +345,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       const item = {
         itemId: ex.item_id,
         accessToken: ex.access_token,
+        env: getConfig(store).env,
         institutionId,
         institutionName,
         addedAt: new Date().toISOString(),
@@ -363,7 +413,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       lastChange: state.lastChange,
       changeCounter: state.changeCounter,
       syncIntervalMinutes: SYNC_INTERVAL_MS / 60000,
-      items: store.read('plaid').items.map(publicItem),
+      items: itemsForCurrentEnv().data.items.map(publicItem),
     });
   });
 
@@ -414,6 +464,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       body.access_token = item.accessToken;
     } else {
       body.products = ['transactions'];
+      body.optional_products = ['liabilities']; // statement balance and due date, where the bank supports it
       body.transactions = { days_requested: HISTORY_DAYS };
     }
     try {

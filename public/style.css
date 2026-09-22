@@ -2315,3 +2315,37 @@ input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
 
 .anomaly-icon { display: inline-flex; color: var(--warning-text); }
 .anomaly-icon .icon { width: 15px; height: 15px; }
+
+.plaid-item-inactive { opacity: .7; border-style: dashed; }
+
+/* Cards & bills */
+.stat-tiles { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.stat-overdue { border-color: var(--danger-border); background: var(--danger-bg); }
+.stat-overdue .stat-sub b { color: var(--danger-strong); }
+.cards-due-list { display: flex; flex-direction: column; gap: .45rem; }
+.due-row {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 1rem; align-items: center;
+  padding: .6rem .8rem; border: 1px solid var(--border); border-radius: 8px; cursor: pointer;
+}
+.due-row:hover { background: var(--bg-subtle); }
+.due-name { font-weight: 600; }
+.due-meta { font-size: .78rem; }
+.due-amounts { text-align: right; }
+.due-statement { font-weight: 700; font-variant-numeric: tabular-nums; }
+.due-min { font-size: .74rem; }
+.due-pill { display: inline-flex; flex-direction: column; align-items: flex-end; font-size: .78rem; font-weight: 600; padding: .3rem .6rem; border-radius: 8px; min-width: 96px; }
+.due-date { font-weight: 400; font-size: .72rem; opacity: .8; }
+.due-ok .due-pill { background: var(--bg-subtle); color: var(--text-secondary); }
+.due-soon .due-pill { background: var(--warning-bg); color: var(--warning-text); }
+.due-overdue .due-pill { background: var(--danger-bg); color: var(--danger-strong); }
+.due-paid .due-pill { background: var(--success-bg); color: var(--success-text); }
+.due-unknown .due-pill { display: none; }
+@media (max-width: 640px) { .due-row { grid-template-columns: 1fr auto; } .due-status { grid-column: 1 / -1; } }
+
+.plaid-more { margin-top: .35rem; }
+.plaid-more > summary { cursor: pointer; font-size: .8rem; list-style: none; }
+.plaid-more > summary::before { content: '›'; display: inline-block; margin-right: .35rem; transition: transform .15s; }
+.plaid-more[open] > summary::before { transform: rotate(90deg); }
+.plaid-more > summary::-webkit-details-marker { display: none; }
+.plaid-account-off { opacity: .75; margin-top: .5rem; }
+.plaid-due { font-size: .78rem; }

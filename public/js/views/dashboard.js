@@ -146,6 +146,7 @@ function renderDashboard() {
   renderRecurring();
   renderAnomalies();
   renderInsights();
+  renderCardsDue();
 
   requestAnimationFrame(() => {
     document.querySelectorAll('.chart-bar[data-w]').forEach(b => { b.style.width = b.dataset.w; });
@@ -349,4 +350,77 @@ function renderRecurring() {
       <div class="recurring-merchant">${r.merchant}</div>
       <div class="recurring-meta"><span class="recurring-avg">${fmt(r.avg)}</span><span class="recurring-months">/mo · ${r.months} months</span></div>
     </div>`)}`;
+}
+
+// ---- Credit cards: statement balance, due date, paid or not (from Plaid Liabilities) ----
+const DAY_MS = 86400000;
+function dueStatus(l) {
+  const today = new Date().toISOString().slice(0, 10);
+  const paid = l.lastStatementIssueDate && l.lastPaymentDate && l.lastPaymentDate >= l.lastStatementIssueDate
+    && (l.lastStatementBalance == null || (l.lastPaymentAmount ?? 0) >= l.lastStatementBalance - 0.01);
+  if (paid) return { kind: 'paid', text: 'Paid', days: Infinity };
+  if (!l.nextPaymentDueDate) return { kind: 'unknown', text: '', days: Infinity };
+  const days = Math.round((Date.parse(l.nextPaymentDueDate) - Date.parse(today)) / DAY_MS);
+  if (l.isOverdue || days < 0) return { kind: 'overdue', text: days < 0 ? `${plural(-days, 'day')} overdue` : 'Overdue', days };
+  if (days === 0) return { kind: 'soon', text: 'Due today', days };
+  return { kind: days <= 7 ? 'soon' : 'ok', text: `Due in ${plural(days, 'day')}`, days };
+}
+
+async function renderCardsDue() {
+  const card = document.getElementById('cards-due-card');
+  const list = document.getElementById('cards-due-list');
+  if (!card || !list) return;
+  let status;
+  try { status = await api('GET', '/api/plaid/status'); } catch { card.style.display = 'none'; return; }
+  const cards = [];
+  for (const item of status.items) {
+    if (item.env && item.env !== status.env) continue;
+    for (const a of item.accounts) if (a.enabled && a.type === 'credit' && a.liability) cards.push({ ...a, institution: item.institutionName, status: dueStatus(a.liability) });
+  }
+  if (!cards.length) { card.style.display = 'none'; renderNextPaymentTile(null); return; }
+  cards.sort((a, b) => a.status.days - b.status.days);
+  card.style.display = '';
+  const upcoming = cards.filter(c => c.status.kind !== 'paid' && c.status.kind !== 'unknown');
+  document.getElementById('cards-due-note').textContent = upcoming.length
+    ? `${fmt(upcoming.reduce((s, c) => s + (c.liability.lastStatementBalance || 0), 0))} due across ${plural(upcoming.length, 'card')}`
+    : 'Nothing due';
+  list.innerHTML = html`${cards.map(c => {
+    const l = c.liability;
+    return html`
+      <div class="due-row due-${c.status.kind}" onclick="clearFilterInputs();document.getElementById('filter-card').value='${escAttr(c.card || '')}';switchView('transactions')" title="See this card's transactions">
+        <div class="due-main">
+          <div class="due-name">${c.card || c.name}</div>
+          <div class="due-meta muted">
+            ${l.lastStatementIssueDate ? html`Statement ${fmtDate(l.lastStatementIssueDate)}` : 'No statement yet'}
+            ${c.balance?.current != null ? html` · Balance ${fmt(c.balance.current)}` : ''}
+            ${c.balance?.limit ? html` of ${fmt(c.balance.limit)}` : ''}
+          </div>
+        </div>
+        <div class="due-amounts">
+          <div class="due-statement">${l.lastStatementBalance != null ? fmt(l.lastStatementBalance) : '—'}</div>
+          <div class="due-min muted">${l.minimumPaymentAmount != null ? `min ${fmt(l.minimumPaymentAmount)}` : ''}</div>
+        </div>
+        <div class="due-status"><span class="due-pill">${c.status.text}${c.status.kind !== 'paid' && l.nextPaymentDueDate ? html`<span class="due-date">${fmtDate(l.nextPaymentDueDate)}</span>` : ''}</span></div>
+      </div>`;
+  })}`;
+  renderNextPaymentTile(upcoming[0] || null);
+}
+
+// A fifth tile when a payment is coming up
+function renderNextPaymentTile(next) {
+  const tiles = document.getElementById('summary-cards');
+  if (!tiles) return;
+  tiles.querySelector('.stat-tile-payment')?.remove();
+  if (!next) return;
+  const l = next.liability;
+  const tile = document.createElement('div');
+  tile.className = `stat-tile stat-tile-payment stat-clickable ${next.status.kind === 'overdue' ? 'stat-overdue' : next.status.kind === 'soon' ? 'stat-attention' : ''}`;
+  tile.setAttribute('role', 'button');
+  tile.setAttribute('tabindex', '0');
+  tile.onclick = () => document.getElementById('cards-due-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  tile.innerHTML = html`
+    <div class="stat-label">Next payment</div>
+    <div class="stat-value stat-value-sm">${l.lastStatementBalance != null ? fmt(l.lastStatementBalance) : '—'}</div>
+    <div class="stat-sub">${next.card || next.name} · <b>${next.status.text.toLowerCase()}</b></div>`;
+  tiles.appendChild(tile);
 }
