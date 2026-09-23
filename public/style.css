@@ -2375,3 +2375,18 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline-offs
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Transaction details ("as it appeared") */
+.txn-row { cursor: pointer; }
+.txn-row:hover td { background: var(--bg-subtle); }
+.txn-details { background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 8px; padding: .7rem .85rem; }
+.txn-raw-label { font-size: .68rem; text-transform: uppercase; letter-spacing: .05em; font-weight: 600; color: var(--muted-light); margin-bottom: .3rem; }
+.txn-raw {
+  display: block; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+  padding: .45rem .6rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .82rem; color: var(--text);
+  word-break: break-all; cursor: copy;
+}
+.txn-raw:hover { border-color: var(--primary-border); }
+.txn-facts { display: flex; flex-wrap: wrap; gap: .3rem .5rem; margin-top: .55rem; font-size: .76rem; color: var(--text-secondary); }
+.txn-facts span::after { content: '·'; margin-left: .5rem; color: var(--muted-light); }
+.txn-facts span:last-child::after { content: none; }

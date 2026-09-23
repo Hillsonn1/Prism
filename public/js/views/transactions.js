@@ -28,8 +28,8 @@ function getSorted(rows) {
   });
 }
 
-function rowActions(t, { stop = false } = {}) {
-  const pre = stop ? 'event.stopPropagation();' : '';
+function rowActions(t) {
+  const pre = 'event.stopPropagation();';
   const identify = (!t.category || t.category === 'Unknown') && state.hasApiKey
     ? html`<button class="icon-btn icon-btn-ai" id="identify-btn-${t.id}" onclick="${raw(pre)}identifyMerchant('${t.id}')" title="Identify with AI" aria-label="Identify merchant with AI">${icon('sparkle')}</button>` : '';
   return html`<div class="row-actions">${identify}
@@ -107,7 +107,7 @@ function renderTransactions() {
           </td>
         </tr>`;
       const detail = expanded ? g.txns.slice().sort((a, b) => b.date.localeCompare(a.date)).map(t => html`
-        <tr class="vendor-detail-row">
+        <tr class="vendor-detail-row txn-row" onclick="openEditModal('${t.id}')" title="Open transaction">
           <td class="vendor-detail-date">${fmtDate(t.date)}</td>
           <td>
             ${t.notes ? html`<span class="txn-note">${t.notes}</span>` : ''}
@@ -116,7 +116,7 @@ function renderTransactions() {
           </td>
           <td>${amountHtml(t, { small: true })}</td>
           <td>${categoryBadge(t.category, `event.stopPropagation();openCategoryPopup(event,'${t.id}')`)}</td>
-          <td>${rowActions(t, { stop: true })}</td>
+          <td>${rowActions(t)}</td>
         </tr>`) : '';
       return html`${groupRow}${detail}`;
     })}`;
@@ -124,10 +124,10 @@ function renderTransactions() {
   }
 
   tbody.innerHTML = html`${filtered.map(t => html`
-    <tr>
+    <tr class="txn-row" onclick="openEditModal('${t.id}')" title="Open transaction">
       <td>${fmtDate(t.date)}</td>
       <td>
-        <div><span class="merchant-link" onclick="goToMerchant('${escAttr(t.merchant)}')">${t.merchant}</span></div>
+        <div><span class="merchant-link" onclick="event.stopPropagation();goToMerchant('${escAttr(t.merchant)}')" title="All purchases from ${t.merchant}">${t.merchant}</span></div>
         ${t.notes ? html`<div class="txn-note">${t.notes}</div>` : ''}
         ${t.card ? html`<div class="txn-card-badge">${t.card}</div>` : ''}${t.pending ? html`<div class="txn-pending-badge">pending</div>` : ''}
       </td>
@@ -351,9 +351,45 @@ document.addEventListener('keydown', e => {
 });
 
 // ---- Add / edit modal ----
+// "TRANSPORTATION_PUBLIC_TRANSIT" → "Transportation › Public transit"
+const PLAID_PRIMARIES = ['GOVERNMENT_AND_NON_PROFIT', 'GENERAL_MERCHANDISE', 'RENT_AND_UTILITIES', 'HOME_IMPROVEMENT', 'GENERAL_SERVICES',
+  'FOOD_AND_DRINK', 'LOAN_PAYMENTS', 'TRANSPORTATION', 'ENTERTAINMENT', 'PERSONAL_CARE', 'TRANSFER_OUT', 'TRANSFER_IN', 'BANK_FEES', 'MEDICAL', 'TRAVEL', 'INCOME', 'OTHER'];
+function plaidCategoryLabel(code) {
+  if (!code) return '';
+  const nice = s => s.toLowerCase().replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  const primary = PLAID_PRIMARIES.find(p => code === p || code.startsWith(p + '_'));
+  if (!primary) return nice(code);
+  const rest = code.slice(primary.length + 1);
+  return rest && rest !== 'OTHER' && !rest.startsWith('OTHER_') ? `${nice(primary)} › ${nice(rest)}` : nice(primary);
+}
+
+function renderTxnDetails(txn) {
+  const el = document.getElementById('edit-details');
+  if (!txn) { el.style.display = 'none'; el.innerHTML = ''; return; }
+  const raw = txn.rawSource && txn.rawSource !== txn.merchant ? txn.rawSource : null;
+  const facts = [];
+  if (txn.card) facts.push(txn.card);
+  facts.push(txn.plaidId ? 'Bank sync' : txn.manual ? 'Added by hand' : txn.source ? `Statement: ${txn.source}` : '');
+  if (txn.plaidCategory) facts.push(`Bank says ${plaidCategoryLabel(txn.plaidCategory)}`);
+  if (txn.importedAt) facts.push(`Imported ${fmtDate(txn.importedAt.slice(0, 10), { year: 'always' })}`);
+  if (txn.pending) facts.push('Pending — the amount may still change');
+  if (txn.originalCurrency === 'ILS') facts.push(`Paid ${fmtOriginal(txn)} at ₪${txn.fxRate} per $1`);
+  if (txn.category) facts.push(txn.categorySource === 'user' ? 'Category set by you' : 'Category guessed by Prism');
+  el.innerHTML = html`
+    ${raw ? html`<div class="txn-raw-label">As it appeared on your statement</div>
+      <button type="button" class="txn-raw" onclick="copyText('${escAttr(raw)}')" title="Click to copy">${raw}</button>` : ''}
+    <div class="txn-facts">${facts.filter(Boolean).map(f => html`<span>${f}</span>`)}</div>`;
+  el.style.display = '';
+}
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); showToast('Copied', 'success'); } catch { showToast('Could not copy', 'error'); }
+}
+
 function _fillEditModal({ title, subtitle, txn }) {
   document.getElementById('edit-modal-title').textContent = title;
   document.getElementById('edit-modal-subtitle').textContent = subtitle;
+  renderTxnDetails(txn);
   document.getElementById('edit-merchant').value = txn?.merchant || '';
   document.getElementById('edit-date').value = txn?.date || new Date().toISOString().slice(0, 10);
   document.getElementById('edit-notes').value = txn?.notes || '';
@@ -379,7 +415,7 @@ function openEditModal(txnId) {
   if (!txn) return;
   state.editingTxnId = txnId;
   state.addingTransaction = false;
-  _fillEditModal({ title: 'Edit Transaction', subtitle: 'Fix parsing errors or add a personal note.', txn });
+  _fillEditModal({ title: txn.merchant, subtitle: `${fmt(txn.amount)} on ${fmtDate(txn.date, { year: 'always' })}`, txn });
 }
 
 // Shekel entries take the ₪ amount; the dollar figure is worked out from the day's rate
