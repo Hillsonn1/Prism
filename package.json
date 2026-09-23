@@ -1,7 +1,7 @@
 {
   "name": "prism",
-  "version": "2.1.1",
-  "description": "Prism \u2014 local-first spending tracker with bank sync",
+  "version": "2.2.0",
+  "description": "Prism — local-first spending tracker with bank sync",
   "main": "electron/main.js",
   "scripts": {
     "start": "node server.js",

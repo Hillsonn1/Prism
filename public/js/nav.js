@@ -12,7 +12,7 @@ function switchView(view, { skipHistory = false, clearHistory = false } = {}) {
   document.getElementById(`view-${view}`).classList.add('active');
   document.querySelector(`[data-view="${view}"]`).classList.add('active');
   const backBtn = document.getElementById('back-btn');
-  if (backBtn) backBtn.style.display = state.navHistory.length ? '' : 'none';
+  if (backBtn) backBtn.style.visibility = state.navHistory.length ? 'visible' : 'hidden'; // keeps its space so the nav never jumps
   window.scrollTo({ top: 0 });
 
   if (view === 'dashboard') renderDashboard();
