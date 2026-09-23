@@ -41,16 +41,24 @@ function escAttr(str) {
 // ---- Money and dates ----
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const ils = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'ILS', currencyDisplay: 'narrowSymbol', maximumFractionDigits: 2 });
+const _currencyFormats = { ILS: ils };
+function currencyFormat(code) {
+  if (!_currencyFormats[code]) {
+    try { _currencyFormats[code] = new Intl.NumberFormat('en-US', { style: 'currency', currency: code, currencyDisplay: 'narrowSymbol', maximumFractionDigits: 2 }); }
+    catch { _currencyFormats[code] = { format: n => `${code} ${n}` }; }
+  }
+  return _currencyFormats[code];
+}
 
 function fmt(amount) {
   return usd.format(amount);
 }
 
-// The original amount for purchases made in another currency ("₪120")
+// The original amount for purchases made in another currency ("₪120", "฿350")
 function fmtOriginal(t) {
-  if (!t || t.originalCurrency !== 'ILS' || typeof t.originalAmount !== 'number') return '';
+  if (!t || !t.originalCurrency || t.originalCurrency === 'USD' || typeof t.originalAmount !== 'number') return '';
   const n = Math.abs(t.originalAmount);
-  return ils.format(Number.isInteger(n) ? n : Math.round(n * 100) / 100).replace(/\.00$/, '');
+  return currencyFormat(t.originalCurrency).format(Number.isInteger(n) ? n : Math.round(n * 100) / 100).replace(/\.00$/, '');
 }
 
 // Dollar amount with the original currency beside it, as markup

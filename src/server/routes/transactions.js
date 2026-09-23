@@ -31,17 +31,17 @@ function tagList(value) {
 function transactionFields(body, { partial = false } = {}) {
   const out = {};
   const has = k => body[k] !== undefined;
-  const shekels = body.originalCurrency === 'ILS';
+  const foreign = isCurrency(body.originalCurrency) && body.originalCurrency !== 'USD';
   // merchant, date and amount can be changed but never blanked; a shekel
   // entry may omit the dollar amount, which is then computed from the rate
   if (!partial || has('merchant')) out.merchant = str(body.merchant, { field: 'merchant', max: 120, required: true });
   if (!partial || has('date')) out.date = isoDate(body.date, { field: 'date', required: true });
-  if (!partial || has('amount')) out.amount = num(body.amount, { field: 'amount', required: !shekels });
+  if (!partial || has('amount')) out.amount = num(body.amount, { field: 'amount', required: !foreign });
   if (has('category')) out.category = body.category === null ? null : str(body.category, { field: 'category', max: 60 }) || null;
   if (has('card')) out.card = str(body.card, { field: 'card', max: 60 });
   if (has('notes')) out.notes = str(body.notes, { field: 'notes', max: 500 });
   if (has('originalCurrency') || has('originalAmount')) {
-    const cur = body.originalCurrency === 'ILS' ? 'ILS' : null;
+    const cur = foreign ? String(body.originalCurrency).toUpperCase() : null;
     out.originalCurrency = cur;
     out.originalAmount = cur ? num(body.originalAmount, { field: 'originalAmount', required: true }) : undefined;
   }
@@ -53,10 +53,12 @@ function transactionFields(body, { partial = false } = {}) {
   return out;
 }
 
-// A shekel purchase without a dollar amount gets one from the day's rate
+const isCurrency = v => typeof v === 'string' && /^[A-Za-z]{3}$/.test(v);
+
+// A foreign-currency purchase without a dollar amount gets one from the day's rate
 async function fillFromShekels(txn, fields, fx) {
-  if (fields.originalCurrency === 'ILS' && fields.amount === undefined) {
-    const conv = await fx.toUSD(fields.originalAmount, fields.date || txn.date);
+  if (fields.originalCurrency && fields.amount === undefined) {
+    const conv = await fx.toUSD(fields.originalAmount, fields.date || txn.date, fields.originalCurrency);
     fields.amount = conv.amount;
     fields.fxRate = conv.fxRate;
   }

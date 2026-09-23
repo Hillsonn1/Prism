@@ -114,7 +114,7 @@ function txnItem(t, { showDate = false } = {}) {
     <div class="txn-item ${countsAsSpend(t) ? '' : 'txn-item-out'}" onclick="openEditModal('${t.id}')" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openEditModal('${t.id}')">
       ${merchantAvatar(t.merchant, { logoUrl: t.logoUrl, category: t.category })}
       <div class="txn-main">
-        <div class="txn-merchant"><span class="merchant-link" onclick="event.stopPropagation();goToMerchant('${escAttr(t.merchant)}')" title="All purchases from ${t.merchant}">${t.merchant}</span>${txnPills(t)}</div>
+        <div class="txn-merchant"><span class="merchant-link" onclick="event.stopPropagation();goToMerchant('${escAttr(t.merchant)}')" title="${state.merchantInfo?.[t.merchant]?.description || `All purchases from ${t.merchant}`}">${t.merchant}</span>${state.merchantInfo?.[t.merchant]?.nativeName ? html`<span class="txn-native" dir="auto">${state.merchantInfo[t.merchant].nativeName}</span>` : ''}${txnPills(t)}</div>
         <div class="txn-sub">${sub.map((x, i) => html`${i ? html`<span class="txn-sub-dot">·</span>` : ''}${x}`)}</div>
       </div>
       <div class="txn-right">${amountHtml(t)}</div>
@@ -499,13 +499,46 @@ function renderTxnDetails(txn) {
   if (txn.plaidCategory) facts.push(`Bank says ${plaidCategoryLabel(txn.plaidCategory)}`);
   if (txn.importedAt) facts.push(`Imported ${fmtDate(txn.importedAt.slice(0, 10), { year: 'always' })}`);
   if (txn.pending) facts.push('Pending — the amount may still change');
-  if (txn.originalCurrency === 'ILS') facts.push(`Paid ${fmtOriginal(txn)} at ₪${txn.fxRate} per $1`);
+  if (txn.originalCurrency && txn.originalCurrency !== 'USD') facts.push(`Paid ${fmtOriginal(txn)}${txn.fxRate ? ` at ${txn.fxRate} ${txn.originalCurrency} per $1` : ''}`);
   if (txn.category) facts.push(txn.categorySource === 'user' ? 'Category set by you' : 'Category guessed by Prism');
+  const info = state.merchantInfo?.[txn.merchant];
   el.innerHTML = html`
     ${raw ? html`<div class="txn-raw-label">As it appeared on your statement</div>
       <button type="button" class="txn-raw" onclick="copyText('${escAttr(raw)}')" title="Click to copy">${raw}</button>` : ''}
-    <div class="txn-facts">${facts.filter(Boolean).map(f => html`<span>${f}</span>`)}</div>`;
+    <div class="txn-facts">${facts.filter(Boolean).map(f => html`<span>${f}</span>`)}</div>
+    <div class="txn-explain" id="txn-explain">${info ? renderExplanation(info, null) : (state.hasApiKey ? html`<button type="button" class="btn-link" onclick="explainTxn('${txn.id}')">${icon('sparkle')} Explain this charge</button>` : '')}</div>`;
   el.style.display = '';
+}
+
+// What a merchant is, from what Prism learned, plus what the ledger says about it
+function renderExplanation(info, stats) {
+  const bits = [];
+  if (info.nativeName) bits.push(html`<span class="explain-native" dir="auto">${info.nativeName}</span>${info.meaning ? html` <span class="muted">— ${info.meaning}</span>` : ''}`);
+  const line = [info.type, info.country ? info.country : null].filter(Boolean).join(' · ');
+  return html`
+    <div class="explain">
+      <div class="explain-head">${icon('sparkle', 'explain-icon')}<strong>${info.displayName || ''}</strong>${line ? html` <span class="muted">· ${line}</span>` : ''}${info.isSubscription ? html` <span class="txn-pill txn-pill-muted">${icon('repeat')} subscription</span>` : ''}</div>
+      ${bits.length ? html`<div class="explain-line">${bits}</div>` : ''}
+      ${info.description ? html`<div class="explain-line">${info.description}</div>` : ''}
+      ${stats ? html`<div class="explain-line muted">${stats.count === 1 ? 'First purchase here' : `${plural(stats.count, 'purchase')} here since ${fmtDate(stats.first)}, ${fmt(stats.average)} on average`}${stats.looksRecurring ? ' · charged monthly' : ''}${stats.refunds ? ` · ${plural(stats.refunds, 'refund')}` : ''}</div>` : ''}
+      <div class="explain-foot muted">${info.source === 'web' ? 'Looked up on the web' : 'From Claude'}${info.confidence < 0.6 ? ' · not sure about this one' : ''} · <button type="button" class="btn-link" onclick="explainTxn('${escAttr(state.editingTxnId || '')}', true)">look again</button></div>
+    </div>`;
+}
+
+async function explainTxn(txnId, force = false) {
+  const box = document.getElementById('txn-explain');
+  if (!box) return;
+  box.innerHTML = html`<span class="muted" style="font-size:.8rem">${icon('sparkle')} Looking this up…</span>`;
+  try {
+    const { info, stats } = await api('POST', `/api/explain/${txnId}`, { force });
+    if (!info) { box.innerHTML = html`<span class="muted" style="font-size:.8rem">Couldn't work out what this is.</span>`; return; }
+    state.merchantInfo = state.merchantInfo || {};
+    const txn = state.transactions.find(t => t.id === txnId);
+    if (txn) state.merchantInfo[txn.merchant] = info;
+    box.innerHTML = renderExplanation(info, stats);
+  } catch (err) {
+    box.innerHTML = html`<span class="muted" style="font-size:.8rem">${err.message}</span>`;
+  }
 }
 
 async function copyText(text) {
@@ -611,10 +644,12 @@ function _fillEditModal({ title, subtitle, txn }) {
   document.getElementById('edit-date').value = txn?.date || new Date().toISOString().slice(0, 10);
   document.getElementById('edit-notes').value = txn?.notes || '';
   document.getElementById('edit-category').innerHTML = categoryOptions(txn?.category || '', { blank: '— Uncategorized —', custom: false });
-  const shekels = txn?.originalCurrency === 'ILS';
-  document.getElementById('edit-currency').value = shekels ? 'ILS' : 'USD';
+  const foreign = txn?.originalCurrency && txn.originalCurrency !== 'USD' ? txn.originalCurrency : null;
+  const curSel = document.getElementById('edit-currency');
+  if (foreign && ![...curSel.options].some(o => o.value === foreign)) curSel.add(new Option(foreign, foreign));
+  curSel.value = foreign || 'USD';
   document.getElementById('edit-amount').value = txn ? Math.abs(txn.amount) : '';
-  document.getElementById('edit-original').value = shekels ? Math.abs(txn.originalAmount) : '';
+  document.getElementById('edit-original').value = foreign ? Math.abs(txn.originalAmount) : '';
   document.getElementById('edit-credit').checked = txn ? txn.amount < 0 : false;
   state.editTags = [...(txn?.tags || [])];
   renderEditTags();
@@ -651,15 +686,17 @@ function openEditModal(txnId) {
 
 // Shekel entries take the ₪ amount; the dollar figure is worked out from the day's rate
 function onEditCurrencyChange() {
-  const shekels = document.getElementById('edit-currency').value === 'ILS';
-  document.getElementById('edit-amount-field').style.display = shekels ? 'none' : '';
-  document.getElementById('edit-original-field').style.display = shekels ? '' : 'none';
+  const cur = document.getElementById('edit-currency').value;
+  const foreign = cur !== 'USD';
+  document.getElementById('edit-amount-field').style.display = foreign ? 'none' : '';
+  document.getElementById('edit-original-field').style.display = foreign ? '' : 'none';
+  document.getElementById('edit-original-label').textContent = `Amount (${cur})`;
   const hint = document.getElementById('edit-fx-hint');
-  if (!shekels) { hint.textContent = ''; return; }
+  if (!foreign) { hint.textContent = ''; return; }
   const latest = state.currency?.latest;
-  hint.textContent = state.currency?.ilsRate !== 'auto'
+  hint.textContent = cur === 'ILS' && state.currency?.ilsRate !== 'auto'
     ? `Converted at your fixed rate of ₪${state.currency.ilsRate} per $1.`
-    : latest ? `Converted at the day's ECB rate (latest: ₪${latest.rate} per $1).` : `Converted at the day's ECB rate.`;
+    : cur === 'ILS' && latest ? `Converted at the day's ECB rate (latest: ₪${latest.rate} per $1).` : `Converted to dollars at the day's ECB rate.`;
 }
 
 function onEditCreditChange() {
@@ -684,7 +721,8 @@ async function saveEditModal() {
   const category = document.getElementById('edit-category').value || null;
   const notes = document.getElementById('edit-notes').value.trim();
   const credit = document.getElementById('edit-credit').checked;
-  const shekels = document.getElementById('edit-currency').value === 'ILS';
+  const currency = document.getElementById('edit-currency').value;
+  const shekels = currency !== 'USD';
   const sign = credit ? -1 : 1;
   const pendingTag = document.getElementById('edit-tag-input').value;
   if (pendingTag) { addEditTag(pendingTag); document.getElementById('edit-tag-input').value = ''; }
@@ -700,8 +738,8 @@ async function saveEditModal() {
   };
   if (shekels) {
     const orig = parseFloat(document.getElementById('edit-original').value);
-    if (isNaN(orig)) { showToast('Enter the shekel amount', 'error'); return; }
-    body.originalCurrency = 'ILS';
+    if (isNaN(orig)) { showToast(`Enter the ${currency} amount`, 'error'); return; }
+    body.originalCurrency = currency;
     body.originalAmount = sign * Math.abs(orig);
   } else {
     const amount = parseFloat(document.getElementById('edit-amount').value);

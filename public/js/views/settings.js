@@ -44,7 +44,9 @@ async function renderSettings() {
   document.querySelectorAll('#theme-picker button').forEach(b => b.classList.toggle('btn-active', b.dataset.theme === theme));
 
   document.getElementById('categorize-btn').textContent = state.hasApiKey ? 'Run' : 'Run (no AI)';
+  document.getElementById('review-btn').disabled = !state.hasApiKey;
   renderCategorySettings();
+  renderAiSettings();
 }
 
 async function saveSettings() {
@@ -393,3 +395,95 @@ async function fetchLogos() {
     } catch (err) { showToast('Failed: ' + err.message, 'error'); }
   });
 }
+
+// ---- Claude: options, usage, merchant intelligence, category review ----
+async function renderAiSettings() {
+  let s;
+  try { s = await api('GET', '/api/ai/status'); } catch { return; }
+  const toggle = document.getElementById('ai-intel-toggle');
+  if (toggle) toggle.checked = s.merchantIntel;
+  const modelSel = document.getElementById('ai-model-select');
+  if (modelSel) modelSel.value = state.prefs.assistantModel === 'fast' ? 'fast' : 'best';
+  const usage = document.getElementById('ai-usage');
+  if (usage) {
+    const u = s.usage || {};
+    const parts = Object.entries(u.features || {}).sort((a, b) => b[1].usd - a[1].usd).slice(0, 4).map(([k, v]) => `${k.replace(/-/g, ' ')} $${v.usd.toFixed(2)}`);
+    usage.textContent = u.calls
+      ? `This month: ${plural(u.calls, 'call')}, about $${u.usd.toFixed(2)} (${parts.join(' · ')}). ${s.known ? `${plural(s.known, 'merchant')} learned so far.` : ''} Estimates from list prices.`
+      : `Nothing spent this month.${s.known ? ` ${plural(s.known, 'merchant')} learned so far.` : ''}`;
+  }
+  document.getElementById('ai-options').style.display = s.available ? '' : 'none';
+}
+
+async function toggleMerchantIntel(on) {
+  await savePrefs({ merchantIntel: on });
+  showToast(on ? 'Prism will learn new merchants after each sync' : 'Merchant learning paused', 'success');
+}
+
+async function setAssistantModel(value) {
+  await savePrefs({ assistantModel: value === 'fast' ? 'fast' : 'best' });
+  if (typeof ask !== 'undefined') ask.available = null;
+  showToast(value === 'fast' ? 'Ask Prism will use Sonnet 5' : 'Ask Prism will use Opus 5', 'success');
+}
+
+async function runMerchantIntel() {
+  await withButton('intel-btn', 'Learning…', async () => {
+    cleanupProgress(true, 0, 'Starting…');
+    try {
+      const data = await streamProgress('/api/merchants/intel/run', (pct, msg) => cleanupProgress(true, pct, msg));
+      const r = data.result;
+      clearAllCaches();
+      await loadAll();
+      renderAiSettings();
+      showToast(r.enriched ? `Learned ${plural(r.enriched, 'merchant')}${r.lookedUp ? ` (${r.lookedUp} looked up on the web)` : ''}${r.categorized ? ` · ${plural(r.categorized, 'purchase')} categorized` : ''}` : 'Every merchant is already known', 'success');
+    } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+    finally { cleanupProgress(false); }
+  });
+}
+
+let _reviewProposals = [];
+async function reviewCategories() {
+  await withButton('review-btn', 'Reviewing…', async () => {
+    cleanupProgress(true, 0, 'Starting…');
+    try {
+      const data = await streamProgress('/api/cleanup/review/run', (pct, msg) => cleanupProgress(true, pct, msg));
+      const r = data.result;
+      if (!r.proposals.length) { showToast(`Claude reviewed ${plural(r.reviewed, 'merchant')} and agrees with all of them`, 'success'); return; }
+      showReviewModal(r);
+    } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+    finally { cleanupProgress(false); }
+  });
+}
+
+function showReviewModal(r) {
+  _reviewProposals = r.proposals;
+  document.getElementById('review-modal-subtitle').textContent = `Claude reviewed ${plural(r.reviewed, 'merchant')} and would change ${r.proposals.length}. Untick anything you disagree with.`;
+  document.getElementById('review-modal-body').innerHTML = html`${r.proposals.map((p, i) => html`
+    <label class="review-row">
+      <input type="checkbox" class="review-check" data-i="${i}" checked />
+      <div class="review-main">
+        <div class="review-line"><span class="review-merchant">${p.merchant}</span><span class="muted">${plural(p.count, 'purchase')}</span></div>
+        <div class="review-change">${categoryBadge(p.from)} <span class="merge-arrow">→</span> ${categoryBadge(p.to)}</div>
+        <div class="review-reason muted">${p.reason}</div>
+      </div>
+    </label>`)}`;
+  document.getElementById('review-modal-overlay').style.display = 'flex';
+}
+function closeReviewModal() {
+  const overlay = document.getElementById('review-modal-overlay');
+  overlay.classList.add('closing');
+  setTimeout(() => { overlay.style.display = 'none'; overlay.classList.remove('closing'); }, 200);
+}
+async function applyReview() {
+  const changes = [...document.querySelectorAll('#review-modal-body .review-check:checked')].map(c => _reviewProposals[+c.dataset.i]).filter(Boolean).map(p => ({ merchant: p.merchant, category: p.to }));
+  closeReviewModal();
+  if (!changes.length) return;
+  try {
+    const r = await api('POST', '/api/cleanup/review/apply', { changes });
+    clearAllCaches();
+    await loadAll();
+    rerenderCurrentView();
+    showToast(`${plural(r.moved, 'purchase')} re-categorized across ${plural(r.merchants, 'merchant')}`, 'success');
+  } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+}
+document.getElementById('review-modal-overlay')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeReviewModal(); });

@@ -177,3 +177,21 @@ test('tags, spending flags, refund links, categories and trips over the API', as
     assert.equal((await api('GET', '/api/dashboard?month=2026-09')).data.budget.income, 5000);
   } finally { await close(); }
 });
+
+test('AI endpoints degrade gracefully without a key; receipts become transactions', async () => {
+  const { api, close } = await boot();
+  try {
+    const status = (await api('GET', '/api/ai/status')).data;
+    assert.equal(status.available, false);
+    assert.equal((await api('POST', '/api/ask', { question: 'hi' })).status, 400);
+    assert.equal((await api('POST', '/api/ask/apply', { proposalId: 'x' })).status, 404);
+    const r = (await api('POST', '/api/upload/receipt', { split: true, card: 'Visa', receipt: { merchant: 'Target', date: '2026-09-05', currency: 'USD', total: 30, items: [{ label: 'Milk', amount: 4, category: 'Groceries' }, { label: 'Eggs', amount: 6, category: 'Groceries' }, { label: 'Lamp', amount: 20, category: 'Home & Garden' }] } })).data;
+    assert.equal(r.created, 2);
+    const txns = (await api('GET', '/api/transactions')).data;
+    assert.deepEqual(txns.map(t => [t.category, t.amount]).sort(), [['Groceries', 10], ['Home & Garden', 20]]);
+    assert.equal(txns[0].card, 'Visa');
+    const again = (await api('POST', '/api/upload/receipt', { split: true, receipt: { merchant: 'Target', date: '2026-09-05', currency: 'USD', total: 30, items: [{ label: 'Milk', amount: 10, category: 'Groceries' }, { label: 'Lamp', amount: 20, category: 'Home & Garden' }] } })).data;
+    assert.equal(again.created, 0, 'the same receipt is not added twice');
+    assert.equal((await api('POST', '/api/explain/nope', {})).status, 404);
+  } finally { await close(); }
+});

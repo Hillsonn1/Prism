@@ -11,6 +11,11 @@ const { createFx } = require('./fx');
 const { createSecrets } = require('./secrets');
 const { toTitleCase } = require('./normalize');
 const { inferCategorySources } = require('./importer');
+const { createClaude } = require('./claude');
+const { createAssistant } = require('./assistant');
+const { createMerchantIntel } = require('./merchantInfo');
+const { createHygiene } = require('./hygiene');
+const { createVision } = require('./vision');
 
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const { version } = require('../../package.json');
@@ -39,19 +44,25 @@ function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null
   secrets.migrate(store);
 
   const apiKey = () => secrets.open(store.read('settings').anthropicApiKey) || null;
-  const plaid = createPlaid({ store, openExternal, log, secrets });
+  const claude = createClaude({ store, apiKey, log });
+  const intel = createMerchantIntel({ store, claude, log });
+  const plaid = createPlaid({ store, openExternal, log, secrets, onChange: () => intel.inBackground() });
   const fx = createFx({ store, log });
+  const assistant = createAssistant({ store, claude, plaid, log });
+  const hygiene = createHygiene({ store, claude, log });
+  const vision = createVision({ claude, store });
 
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '2mb' }));
   app.use(express.static(PUBLIC_DIR));
   app.use('/api', require('./routes/transactions')({ store, plaid, fx }));
-  app.use('/api', require('./routes/import')({ store, uploadsDir, apiKey, fx }));
+  app.use('/api', require('./routes/import')({ store, uploadsDir, apiKey, fx, vision, claude, intel }));
   app.use('/api', require('./routes/budget')({ store, apiKey }));
   app.use('/api', require('./routes/settings')({ store, version, apiKey, fx, dataDir, openFolder, secrets }));
   app.use('/api', require('./routes/categories')({ store }));
   app.use('/api', require('./routes/trips')({ store }));
+  app.use('/api', require('./routes/ai')({ store, claude, assistant, intel, hygiene, fx }));
   app.use('/api/plaid', plaid.router);
   app.use('/api', (req, res) => res.status(404).json({ error: `No such endpoint: ${req.method} ${req.path}` }));
   // eslint-disable-next-line no-unused-vars

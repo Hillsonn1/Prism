@@ -10,13 +10,15 @@ async function api(method, path, body) {
 }
 
 async function loadAll() {
-  const [txns, merchants, settings] = await Promise.all([
+  const [txns, merchants, settings, merchantInfo] = await Promise.all([
     api('GET', '/api/transactions'),
     api('GET', '/api/merchants'),
     api('GET', '/api/settings'),
+    api('GET', '/api/merchants/intel').catch(() => ({})),
   ]);
   state.transactions = Array.isArray(txns) ? txns : [];
   state.merchants = merchants && typeof merchants === 'object' ? merchants : {};
+  state.merchantInfo = merchantInfo && typeof merchantInfo === 'object' ? merchantInfo : {};
   applySettings(settings);
   state.txVersion++;
   clearDashboardCaches();

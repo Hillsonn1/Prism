@@ -192,12 +192,12 @@
         <div class="card upload-card">
           <div class="upload-zone" id="upload-zone">
             <div class="upload-icon" data-icon="file"></div>
-            <h2>Drop a statement here</h2>
-            <p>CSV or PDF from any bank or card</p>
+            <h2>Drop a statement, screenshot or receipt here</h2>
+            <p>CSV or PDF from any bank or card · with an API key, also screenshots of a banking app and photos of receipts</p>
             <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">
               Choose File
             </button>
-            <input type="file" id="file-input" accept=".csv,.pdf" style="display:none" />
+            <input type="file" id="file-input" accept=".csv,.pdf,.png,.jpg,.jpeg,.webp,.gif" style="display:none" />
           </div>
           <div id="pending-upload-panel" style="display:none">
             <div class="pending-upload-file" id="pending-upload-filename"></div>
@@ -240,7 +240,8 @@
             <li><strong>Citi</strong> — Date, Description, Debit/Credit</li>
             <li><strong>Bank of America</strong> — Posted Date, Payee, Amount</li>
             <li><strong>Any CSV</strong> with Date, Description/Merchant, and Amount columns</li>
-            <li><strong>PDF statements</strong> — works best when transactions are on individual lines</li>
+            <li><strong>PDF statements</strong> — read by Claude when an API key is set, otherwise works best when transactions are on individual lines</li>
+            <li><strong>Screenshots and receipts</strong> (PNG, JPEG) — read by Claude; a receipt can be split by category</li>
           </ul>
         </details>
       </div>
@@ -317,8 +318,9 @@
             <div id="settings-key-status"></div>
           </div>
           <p class="muted card-lead">
-            Prism categorizes, cleans up and analyzes on its own. An Anthropic API key adds Claude for the leftovers:
-            merchants nothing recognizes, web-search identification, and written summaries.
+            Prism categorizes, cleans up and analyzes on its own. An Anthropic API key adds Claude: ask questions about your
+            spending (⌘K), import statements, app screenshots and receipts by reading them, learn what unfamiliar merchants are,
+            review categories with reasons, and explain any charge. Only what's needed for each job leaves your Mac.
           </p>
           <div class="settings-form">
             <label class="settings-label" for="settings-api-key">Anthropic API key</label>
@@ -335,6 +337,21 @@
               <button class="btn btn-secondary" onclick="saveLocation()">Save</button>
             </div>
             <p class="settings-hint" id="location-status"></p>
+          </div>
+          <div class="settings-form" style="margin-top:1.25rem" id="ai-options">
+            <label class="settings-label">What the key does</label>
+            <div class="ai-option-row">
+              <label class="edit-check"><input type="checkbox" id="ai-intel-toggle" onchange="toggleMerchantIntel(this.checked)" /><span>Learn what unfamiliar merchants are, in the background <span class="muted">— name, type, native-script name; used by "Explain" and to categorize the long tail</span></span></label>
+              <button class="btn btn-secondary btn-sm" id="intel-btn" onclick="runMerchantIntel()">Learn now</button>
+            </div>
+            <div class="ai-option-row">
+              <span class="edit-check" style="cursor:default"><span>Ask Prism answers with</span></span>
+              <select id="ai-model-select" onchange="setAssistantModel(this.value)">
+                <option value="best">Opus 5 — best answers</option>
+                <option value="fast">Sonnet 5 — faster, cheaper</option>
+              </select>
+            </div>
+            <p class="settings-hint" id="ai-usage"></p>
           </div>
         </div>
 
@@ -392,6 +409,13 @@
                 <div class="muted cleanup-action-desc">Strips transaction codes, store numbers, and payment-processor prefixes from names imported by older versions.</div>
               </div>
               <button class="btn btn-secondary" id="normalize-btn" onclick="normalizeNames()">Tidy</button>
+            </div>
+            <div class="cleanup-action">
+              <div>
+                <div class="cleanup-action-title">Review categories <span class="ai-badge">AI</span></div>
+                <div class="muted cleanup-action-desc">Claude looks over every category Prism guessed and lists the ones it would change, each with a reason. You pick which to apply.</div>
+              </div>
+              <button class="btn btn-secondary" id="review-btn" onclick="reviewCategories()">Review</button>
             </div>
             <div class="cleanup-action">
               <div>
@@ -479,6 +503,40 @@
     </main>
   </div>
 
+  <!-- Ask Prism -->
+  <button id="ask-fab" class="ask-fab" onclick="toggleAsk()" title="Ask Prism (⌘K)"><span data-icon="sparkle"></span> Ask</button>
+  <aside id="ask-panel" class="ask-panel" aria-label="Ask Prism" aria-hidden="true">
+    <div class="ask-head">
+      <div class="ask-title"><span data-icon="sparkle"></span> Ask Prism</div>
+      <div class="ask-head-actions">
+        <button class="icon-btn" onclick="resetAsk()" title="New conversation" aria-label="New conversation"><span data-icon="refresh"></span></button>
+        <button class="icon-btn" onclick="toggleAsk(false)" title="Close (Esc)" aria-label="Close"><span data-icon="x"></span></button>
+      </div>
+    </div>
+    <div id="ask-messages" class="ask-messages"></div>
+    <div id="ask-suggest" class="ask-suggest chips"></div>
+    <form class="ask-form" onsubmit="submitAsk(event)">
+      <textarea id="ask-input" rows="1" placeholder="Ask about your spending…" aria-label="Question"></textarea>
+      <button class="btn btn-primary btn-sm" type="submit" aria-label="Ask"><span data-icon="arrow-right"></span></button>
+    </form>
+    <div id="ask-foot" class="ask-foot muted"></div>
+  </aside>
+
+  <!-- Category review (Claude) -->
+  <div id="review-modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal" style="max-width:680px" role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
+      <div class="modal-header">
+        <h2 id="review-modal-title">Category review</h2>
+        <p class="modal-subtitle" id="review-modal-subtitle"></p>
+      </div>
+      <div class="modal-body merge-list" id="review-modal-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeReviewModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="applyReview()">Apply selected</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Category Modal -->
   <div id="modal-overlay" class="modal-overlay" style="display:none">
     <div class="modal">
@@ -517,6 +575,9 @@
             <select id="edit-currency" onchange="onEditCurrencyChange()">
               <option value="USD">Dollars ($)</option>
               <option value="ILS">Shekels (₪)</option>
+              <option value="THB">Baht (฿)</option>
+              <option value="EUR">Euro (€)</option>
+              <option value="GBP">Pounds (£)</option>
             </select>
           </div>
           <div class="edit-field" id="edit-amount-field">
@@ -524,7 +585,7 @@
             <input type="number" id="edit-amount" step="0.01" min="0" inputmode="decimal" />
           </div>
           <div class="edit-field" id="edit-original-field" style="display:none">
-            <label class="edit-label" for="edit-original">Amount (₪)</label>
+            <label class="edit-label" for="edit-original" id="edit-original-label">Amount (₪)</label>
             <input type="number" id="edit-original" step="0.01" min="0" inputmode="decimal" />
           </div>
         </div>
@@ -654,6 +715,7 @@
   <script src="js/views/settings.js"></script>
   <script src="js/views/plaid.js"></script>
   <script src="js/modals.js"></script>
+  <script src="js/ask.js"></script>
   <script src="js/update.js"></script>
   <script src="js/app.js"></script>
 </body>

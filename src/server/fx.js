@@ -14,46 +14,50 @@ function createFx({ store, log = console }) {
     return typeof r === 'number' && r > 0 ? r : null;
   };
 
-  const cached = date => store.read('fx').ILS?.[date] || null;
-  const latestCached = () => {
-    const all = store.read('fx').ILS || {};
+  const cached = (date, cur) => store.read('fx')[cur]?.[date] || null;
+  const latestCached = (cur = 'ILS') => {
+    const all = store.read('fx')[cur] || {};
     const dates = Object.keys(all).sort();
     return dates.length ? { date: dates[dates.length - 1], rate: all[dates[dates.length - 1]] } : null;
   };
 
-  async function fetchRate(date) {
+  async function fetchRate(date, cur) {
     const today = new Date().toISOString().slice(0, 10);
     const path = date && date < today ? date : 'latest';
-    const res = await fetch(`${RATE_HOST}/${path}?base=USD&symbols=ILS`, { signal: AbortSignal.timeout(8000) });
+    const res = await fetch(`${RATE_HOST}/${path}?base=USD&symbols=${cur}`, { signal: AbortSignal.timeout(8000) });
     if (!res.ok) throw new Error(`rate lookup failed (${res.status})`);
     const data = await res.json();
-    const rate = data.rates?.ILS;
-    if (!(rate > 0)) throw new Error('rate lookup returned no ILS rate');
-    store.update('fx', fx => { (fx.ILS = fx.ILS || {})[date || data.date] = rate; });
+    const rate = data.rates?.[cur];
+    if (!(rate > 0)) throw new Error(`rate lookup returned no ${cur} rate`);
+    store.update('fx', fx => { (fx[cur] = fx[cur] || {})[date || data.date] = rate; });
     return rate;
   }
 
-  // ILS per USD for a given date, with where it came from
-  async function rate(date) {
-    const manual = manualRate();
+  // Units of `currency` per USD for a given date, with where it came from.
+  // The manual rate in Settings applies to shekels only.
+  async function rate(date, currency = 'ILS') {
+    const cur = String(currency || 'ILS').toUpperCase();
+    const manual = cur === 'ILS' ? manualRate() : null;
     if (manual) return { rate: manual, source: 'manual', date };
     const day = (date || new Date().toISOString()).slice(0, 10);
-    const hit = cached(day);
+    const hit = cached(day, cur);
     if (hit) return { rate: hit, source: 'ecb', date: day };
     try {
-      return { rate: await fetchRate(day), source: 'ecb', date: day };
+      return { rate: await fetchRate(day, cur), source: 'ecb', date: day };
     } catch (err) {
       log.error('FX rate lookup failed:', err.message);
-      const latest = latestCached();
+      const latest = latestCached(cur);
       if (latest) return { rate: latest.rate, source: 'ecb-stale', date: latest.date };
-      return { rate: FALLBACK_RATE, source: 'fallback', date: day };
+      if (cur === 'ILS') return { rate: FALLBACK_RATE, source: 'fallback', date: day };
+      throw new Error(`No exchange rate available for ${cur}`);
     }
   }
 
-  // Converts a shekel amount to dollars, returning both plus the rate used
-  async function toUSD(ils, date) {
-    const r = await rate(date);
-    return { amount: Math.round((ils / r.rate) * 100) / 100, originalAmount: ils, originalCurrency: 'ILS', fxRate: r.rate, fxSource: r.source };
+  // Converts a foreign amount to dollars, returning both plus the rate used
+  async function toUSD(original, date, currency = 'ILS') {
+    const cur = String(currency || 'ILS').toUpperCase();
+    const r = await rate(date, cur);
+    return { amount: Math.round((original / r.rate) * 100) / 100, originalAmount: original, originalCurrency: cur, fxRate: r.rate, fxSource: r.source };
   }
 
   return { rate, toUSD, manualRate, latestCached };

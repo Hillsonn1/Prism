@@ -6,7 +6,7 @@ let pendingFile = null;
 
 function showPendingUpload(file) {
   pendingFile = file;
-  document.getElementById('pending-upload-filename').textContent = `📄 ${file.name}`;
+  document.getElementById('pending-upload-filename').textContent = `${/\.(png|jpe?g|webp|gif)$/i.test(file.name) ? '🖼' : '📄'} ${file.name}`;
   document.getElementById('pending-upload-panel').style.display = '';
   document.getElementById('upload-zone').style.display = 'none';
   document.getElementById('upload-result').style.display = 'none';
@@ -90,9 +90,10 @@ async function uploadFile(file) {
     return fail(err.message);
   }
 
-  const { imported, duplicates, suggestions = [], unknownMerchants = [] } = data.result;
+  if (data.result?.receipt) { await handleReceipt(data.result.receipt, data.result.notes, cardName, resultEl); return; }
+  const { imported, duplicates, suggestions = [], unknownMerchants = [], readBy } = data.result;
   resultEl.innerHTML = html`
-    <div class="result-success">✅ Imported <strong>${plural(imported, 'transaction')}</strong>${currency === 'ILS' ? ' (converted from shekels)' : ''}</div>
+    <div class="result-success">✅ Imported <strong>${plural(imported, 'transaction')}</strong>${currency === 'ILS' ? ' (converted from shekels)' : ''}${readBy === 'claude' ? ' · read by Claude' : ''}</div>
     <div class="upload-stats">
       <div class="upload-stat"><div class="stat-label">Imported</div><div class="stat-value">${imported}</div></div>
       <div class="upload-stat"><div class="stat-label">Duplicates skipped</div><div class="stat-value">${duplicates}</div></div>
@@ -104,6 +105,42 @@ async function uploadFile(file) {
   document.getElementById('upload-zone').style.display = '';
   if (suggestions.length + unknownMerchants.length > 0) showCategoryModal(suggestions, unknownMerchants);
   else showToast('Import complete', 'success');
+}
+
+// A receipt: one purchase, or one row per category of what's on it
+async function handleReceipt(receipt, notes, card, resultEl) {
+  const byCat = {};
+  for (const i of receipt.items) byCat[i.category || 'Other'] = (byCat[i.category || 'Other'] || 0) + i.amount;
+  const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+  const money = n => currencyFormat(receipt.currency || 'USD').format(n);
+  resultEl.innerHTML = html`
+    <div class="result-success">🧾 Receipt from <strong>${receipt.merchant}</strong> · ${fmtDate(receipt.date)} · ${money(receipt.total)}</div>
+    ${notes ? html`<p class="settings-hint">${notes}</p>` : ''}
+    <div class="receipt-items">${receipt.items.slice(0, 40).map(i => html`<div class="receipt-item"><span>${i.label}</span><span class="muted">${i.category || ''}</span><span class="amount amount-sm">${money(i.amount)}</span></div>`)}</div>
+    <div class="pending-upload-actions" style="justify-content:flex-start;margin-top:1rem">
+      <button class="btn btn-primary" onclick="saveReceipt(false)">Add as one purchase</button>
+      ${cats.length > 1 ? html`<button class="btn btn-secondary" onclick="saveReceipt(true)">Split into ${plural(cats.length, 'category')} (${cats.map(([c, a]) => `${c} ${money(a)}`).join(', ')})</button>` : ''}
+      <button class="btn btn-ghost" onclick="cancelReceipt()">Discard</button>
+    </div>`;
+  state._pendingReceipt = { receipt, card };
+}
+async function saveReceipt(split) {
+  const p = state._pendingReceipt;
+  if (!p) return;
+  try {
+    const r = await api('POST', '/api/upload/receipt', { receipt: p.receipt, card: p.card, split });
+    state._pendingReceipt = null;
+    clearAllCaches();
+    await loadAll();
+    document.getElementById('upload-result').innerHTML = html`<div class="result-success">✅ ${r.created ? `Added ${plural(r.created, 'transaction')}` : 'Already there — nothing added'}${r.skipped ? ` · ${r.skipped} skipped as duplicates` : ''}</div>`;
+    document.getElementById('upload-zone').style.display = '';
+    showToast(r.created ? 'Receipt added' : 'That receipt was already recorded', r.created ? 'success' : 'info');
+  } catch (err) { showToast(err.message, 'error'); }
+}
+function cancelReceipt() {
+  state._pendingReceipt = null;
+  document.getElementById('upload-result').style.display = 'none';
+  document.getElementById('upload-zone').style.display = '';
 }
 
 // ---- The page: bank sync at a glance, then statements ----

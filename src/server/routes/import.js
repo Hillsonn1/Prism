@@ -59,7 +59,7 @@ async function convertRows(rows, fx) {
   return out;
 }
 
-module.exports = function importRoutes({ store, uploadsDir, apiKey, fx }) {
+module.exports = function importRoutes({ store, uploadsDir, apiKey, fx, vision = null, claude = null, intel = null }) {
   const router = express.Router();
   const upload = multer({ dest: uploadsDir, limits: { fileSize: 25 * 1024 * 1024 } });
   const pendingUploads = new Map(); // uploadId → { filePath, originalName, cardName, statementName }
@@ -69,9 +69,14 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey, fx }) {
   router.post('/upload/start', upload.single('file'), route((req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const ext = path.extname(req.file.originalname).toLowerCase();
-    if (ext !== '.csv' && ext !== '.pdf') {
+    const isImage = ['.png', '.jpg', '.jpeg', '.webp', '.gif'].includes(ext);
+    if (ext !== '.csv' && ext !== '.pdf' && !isImage) {
       discard(req.file.path);
-      return res.status(400).json({ error: 'Only CSV and PDF files are supported.' });
+      return res.status(400).json({ error: ext === '.heic' ? 'HEIC photos can\'t be read — export as JPEG first.' : 'Only CSV, PDF and image files are supported.' });
+    }
+    if (isImage && !(claude && claude.available())) {
+      discard(req.file.path);
+      return res.status(400).json({ error: 'Reading screenshots and receipts needs an Anthropic API key — add one in Settings.' });
     }
     const uploadId = crypto.randomUUID();
     pendingUploads.set(uploadId, {
@@ -98,15 +103,46 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey, fx }) {
     try {
       send(10, 'Parsing file…');
       const ext = path.extname(originalName).toLowerCase();
-      let rows = ext === '.csv'
-        ? parseCSV(fs.readFileSync(filePath, 'utf8'))
-        : await parsePDF(fs.readFileSync(filePath));
+      let rows;
+      let readBy = 'parser';
+      if (ext === '.csv') {
+        rows = parseCSV(fs.readFileSync(filePath, 'utf8'));
+      } else if (vision && claude && claude.available()) {
+        // Claude reads PDFs, screenshots and receipts; the plain parser is the fallback for PDFs
+        send(15, 'Reading the document with Claude…');
+        const buffer = fs.readFileSync(filePath);
+        let extracted = null;
+        try { extracted = await vision.extract({ buffer, filename: originalName, hint: { currency, card: cardName } }); }
+        catch (err) { if (ext !== '.pdf') throw err; send(18, `Claude couldn't read it (${err.message}); trying the plain parser…`); }
+        if (extracted?.kind === 'receipt') {
+          discard(filePath);
+          send(100, 'Receipt read', { done: true, result: { receipt: extracted.receipt, notes: extracted.notes, card: cardName } });
+          return res.end();
+        }
+        if (extracted) {
+          readBy = 'claude';
+          rows = [];
+          for (const r of extracted.rows) {
+            if (r.isPayment || isPayment(r.description) || isCardCredit(r.description, r.amount)) continue;
+            const rowCurrency = r.currency || extracted.currency || 'USD';
+            const base = { date: r.date, merchant: r.description, amount: r.amount };
+            if (rowCurrency !== 'USD') rows.push({ ...base, ...(await fx.toUSD(r.amount, r.date, rowCurrency)) });
+            else if (r.originalAmount && r.originalCurrency && r.originalCurrency !== 'USD') rows.push({ ...base, originalAmount: r.originalAmount, originalCurrency: r.originalCurrency, fxRate: Math.round(Math.abs(r.originalAmount / r.amount) * 10000) / 10000 });
+            else rows.push(base);
+          }
+          if (extracted.notes) send(28, `Claude notes: ${extracted.notes}`);
+        } else {
+          rows = await parsePDF(buffer);
+        }
+      } else {
+        rows = await parsePDF(fs.readFileSync(filePath));
+      }
       discard(filePath);
       if (!rows.length) {
-        send(0, 'No transactions found in this file. The format may not be supported.', { error: true });
+        send(0, readBy === 'claude' ? 'No purchases were found in this document.' : 'No transactions found in this file. The format may not be supported.', { error: true });
         return res.end();
       }
-      if (currency === 'ILS') {
+      if (currency === 'ILS' && readBy !== 'claude') {
         send(20, 'Converting shekels to dollars…');
         rows = await convertRows(rows, fx);
       }
@@ -116,7 +152,8 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey, fx }) {
         onProgress: (frac, msg) => send(Math.round(40 + frac * 48), msg),
       });
       send(92, 'Saving…');
-      send(100, 'Done!', { done: true, result });
+      if (intel) intel.inBackground();
+      send(100, 'Done!', { done: true, result: { ...result, readBy } });
     } catch (err) {
       discard(filePath);
       send(0, err.message, { error: true });

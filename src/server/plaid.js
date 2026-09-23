@@ -95,7 +95,7 @@ async function httpRequest(cfg, endpoint, body) {
   return data;
 }
 
-function createPlaid({ store, openExternal = null, log = console, request = httpRequest, secrets = { seal: v => v, open: v => v, available: false } }) {
+function createPlaid({ store, openExternal = null, log = console, request = httpRequest, secrets = { seal: v => v, open: v => v, available: false }, onChange = null }) {
   const token = item => secrets.open(item.accessToken);
   const state = { syncing: false, lastSyncAt: null, lastResult: null, lastChange: null, changeCounter: 0 };
 
@@ -355,6 +355,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
           state.lastChange = { ...totals, at: state.lastSyncAt };
           state.changeCounter++;
         }
+        if (totals.added && onChange) { try { onChange(totals); } catch (err) { log.error('post-sync hook failed:', err.message); } }
       } finally {
         state.syncing = false;
       }

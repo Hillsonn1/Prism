@@ -17,6 +17,7 @@ const FILES = {
   expenses:     { file: 'expenses.json',     empty: () => ({}) },
   plaid:        { file: 'plaid.json',        empty: () => ({ items: [] }) },
   fx:           { file: 'fx.json',           empty: () => ({}) },
+  merchantInfo: { file: 'merchant-info.json', empty: () => ({}) },
 };
 
 const BACKUPS_TO_KEEP = 7;
