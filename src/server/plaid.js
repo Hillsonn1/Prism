@@ -183,7 +183,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       });
     }
 
-    const apiKey = store.read('settings').anthropicApiKey || null;
+    const apiKey = secrets.open(store.read('settings').anthropicApiKey) || null; // sealed on disk
     if (unknown.size && apiKey) await aiPass(unknown, fresh, merchants, apiKey);
     for (const t of fresh) { delete t._raw; if (!t.logoUrl) delete t.logoUrl; if (!t.location) delete t.location; }
     applyRedirects(store, fresh, merchants);
