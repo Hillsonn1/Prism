@@ -24,6 +24,7 @@ function switchView(view, { skipHistory = false, clearHistory = false } = {}) {
   }
   if (view === 'merchants') renderMerchants();
   if (view === 'budget') renderBudget();
+  if (view === 'trips') renderTrips();
   if (view === 'settings') renderSettings();
 }
 
@@ -44,6 +45,7 @@ function rerenderCurrentView() {
   else if (v === 'transactions') renderTransactions();
   else if (v === 'merchants') renderMerchants();
   else if (v === 'budget') renderBudget();
+  else if (v === 'trips') renderTrips();
   else if (v === 'settings') renderSettings();
   else if (v === 'upload') renderImportPage();
 }

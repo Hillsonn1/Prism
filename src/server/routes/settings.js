@@ -4,6 +4,7 @@ const { getConfig: plaidConfig } = require('../plaid');
 const { str, num, route } = require('../validate');
 const { anomalies, spendingInsights } = require('../insights');
 const { categoryFromDescription } = require('../categories');
+const { getCategories } = require('../categoryConfig');
 const ai = require('../ai');
 
 const SITE_URL = 'https://prismspendtracker.netlify.app';
@@ -66,6 +67,8 @@ module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, 
       location: s.location || '',
       prefs: s.prefs || {},
       currency: { ilsRate: s.currency?.ilsRate || 'auto', latest: fx.latestCached() },
+      categories: getCategories(store),
+      trips: s.trips || [],
     });
   });
 

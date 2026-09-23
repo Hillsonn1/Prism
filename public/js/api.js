@@ -29,6 +29,8 @@ function applySettings(settings) {
   state.prefs = settings.prefs || {};
   state.currency = settings.currency || { ilsRate: 'auto', latest: null };
   state.dismissedAnomalies = new Set(state.prefs.dismissedAnomalies || []);
+  setCategories(settings.categories);
+  state.trips = settings.trips || [];
   applyTheme(state.prefs.theme || 'system');
 }
 

@@ -6,9 +6,18 @@ function renderMerchants() {
   const filtered = search ? entries.filter(([m]) => m.toLowerCase().includes(search)) : entries;
   const txnCounts = {};
   const totals = {};
+  const logos = {};
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const months = monthsEndingAt(thisMonth, 6);
+  const series = {};
   for (const t of state.transactions) {
     txnCounts[t.merchant] = (txnCounts[t.merchant] || 0) + 1;
+    if (t.logoUrl && !logos[t.merchant]) logos[t.merchant] = t.logoUrl;
+    if (!countsAsSpend(t)) continue;
     totals[t.merchant] = (totals[t.merchant] || 0) + t.amount;
+    const m = t.date?.slice(0, 7);
+    const i = months.indexOf(m);
+    if (i !== -1 && t.amount > 0) (series[t.merchant] = series[t.merchant] || months.map(() => 0))[i] += t.amount;
   }
 
   const { col, dir } = state.merchantSort;
@@ -43,10 +52,10 @@ function renderMerchants() {
   table.style.display = '';
   document.getElementById('merchants-body').innerHTML = html`${filtered.map(([merchant, category]) => html`
     <tr>
-      <td><span class="merchant-link" onclick="jumpToMerchant('${escAttr(merchant)}')" title="See transactions">${merchant}</span></td>
+      <td><div class="merchant-cell">${merchantAvatar(merchant, { logoUrl: logos[merchant], category, size: 'sm' })}<span class="merchant-link" onclick="jumpToMerchant('${escAttr(merchant)}')" title="See transactions">${merchant}</span></div></td>
       <td>${categoryBadge(category, `openCategoryPopupForMerchant(event,'${escAttr(merchant)}')`)}</td>
       <td>${txnCounts[merchant] || 0}</td>
-      <td><span class="amount">${fmt(totals[merchant] || 0)}</span></td>
+      <td><div class="merchant-total">${series[merchant] && series[merchant].filter(Boolean).length > 1 ? html`<span class="chart-spark" title="Last 6 months">${sparkline(series[merchant], { width: 48, height: 16, color: categoryColor(category) })}</span>` : ''}<span class="amount">${fmt(totals[merchant] || 0)}</span></div></td>
       <td>
         <div class="row-actions">
           <button class="icon-btn" onclick="showMerchantChart('${escAttr(merchant)}')" title="Spending over time" aria-label="Spending over time">${icon('chart')}</button>
@@ -76,7 +85,7 @@ function goToMerchant(merchant) {
 function showMerchantChart(merchant) {
   const monthly = {};
   for (const t of state.transactions) {
-    if (t.merchant !== merchant || t.amount <= 0) continue;
+    if (t.merchant !== merchant || t.amount <= 0 || !countsAsSpend(t)) continue;
     const m = t.date?.slice(0, 7);
     if (m) monthly[m] = (monthly[m] || 0) + t.amount;
   }

@@ -30,6 +30,16 @@ function dedupKeys(transactions) {
 // the user's own memory (exact, then a close match) → brand rules → the
 // category the bank or Plaid supplied → generic business-type words.
 // Returns { name, category, confidence, learned }; category may be null.
+// Built-in categories the user merged away are sent on to their replacement
+function applyRedirects(store, rows, merchants, suggestions = []) {
+  const { redirectMap, resolve } = require('./categoryConfig');
+  const map = redirectMap(store);
+  if (!Object.keys(map).length) return;
+  for (const t of rows) if (t.category) t.category = resolve(map, t.category);
+  for (const k of Object.keys(merchants)) merchants[k] = resolve(map, merchants[k]);
+  for (const s of suggestions) if (s.category) s.category = resolve(map, s.category);
+}
+
 function localCategory(rawMerchant, merchants, hint) {
   const name = quickNormalizeName(rawMerchant);
   const remembered = merchants[name] || merchants[rawMerchant];
@@ -144,6 +154,7 @@ async function importRows(store, rows, meta, { apiKey = null, onProgress } = {})
     unknownMerchants = fromAI.unknownMerchants;
   }
   for (const t of fresh) delete t._raw;
+  applyRedirects(store, fresh, merchants, suggestions);
 
   // Re-read: an AI pass takes a while and the user may have edited meanwhile
   const current = store.read('transactions');
@@ -198,6 +209,7 @@ async function categorizeUncategorized(store, { apiKey = null, onProgress } = {}
     autoUpdated += before - rows.filter(t => !t.category).length;
   }
   for (const t of rows) delete t._raw;
+  applyRedirects(store, transactions, merchants, suggestions);
 
   store.write('transactions', transactions);
   store.write('merchants', merchants);
@@ -211,6 +223,9 @@ async function categorizeUncategorized(store, { apiKey = null, onProgress } = {}
 function recheckCategories(store) {
   const transactions = store.read('transactions');
   const merchants = store.read('merchants');
+  const { redirectMap, resolve } = require('./categoryConfig');
+  const redirects = redirectMap(store);
+  const resolveRedirect = c => resolve(redirects, c);
   const userSet = new Set(transactions.filter(t => t.categorySource === 'user').map(t => t.merchant));
   let changed = 0;
   const changes = {};
@@ -218,7 +233,7 @@ function recheckCategories(store) {
     if (t.categorySource === 'user' || userSet.has(t.merchant)) continue;
     const hint = mapPlaidCategory(t.plaidCategory);
     const guess = localCategory(t.rawSource || t.merchant, {}, hint);
-    const rulesOnly = guess.category && guess.confidence >= HIGH_CONFIDENCE ? guess.category : null;
+    const rulesOnly = guess.category && guess.confidence >= HIGH_CONFIDENCE ? resolveRedirect(guess.category) : null;
     if (rulesOnly && rulesOnly !== t.category) {
       changes[t.merchant] = changes[t.merchant] || { from: t.category, to: rulesOnly, count: 0 };
       changes[t.merchant].count++;
@@ -251,4 +266,4 @@ function inferCategorySources(store) {
   store.update('settings', s => { s.categorySourceMigrated = true; });
 }
 
-module.exports = { importRows, categorizeUncategorized, recheckCategories, inferCategorySources, localCategory, dedupKeys, aiPass, mapPlaidCategory };
+module.exports = { importRows, categorizeUncategorized, recheckCategories, inferCategorySources, localCategory, dedupKeys, aiPass, mapPlaidCategory, applyRedirects };

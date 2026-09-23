@@ -3,6 +3,29 @@ const crypto = require('crypto');
 const express = require('express');
 const { str, num, isoDate, bad, route } = require('../validate');
 const { anomalies, spendingInsights } = require('../insights');
+const { refundCandidates, autoMatchRefunds, linkRefund } = require('../refunds');
+const { redirectMap, resolve } = require('../categoryConfig');
+
+const RECURRING = '_recurring';
+// Income and fixed expenses entered on the Budget page for a month
+function budgetFor(store, month) {
+  const sum = name => { const all = store.read(name); return [...(all[RECURRING] || []), ...(all[month] || [])].reduce((s, e) => s + (e.amount || 0), 0); };
+  const income = store.read('income');
+  const hasIncome = Boolean((income[RECURRING] || []).length || (income[month] || []).length);
+  return { income: sum('income'), fixed: sum('expenses'), hasIncome };
+}
+
+// Free-form labels: trimmed, deduplicated regardless of case, a handful at most
+function tagList(value) {
+  if (value === null) return [];
+  if (!Array.isArray(value)) throw bad('tags must be a list');
+  const out = [];
+  for (const v of value) {
+    const s = str(v, { field: 'tag', max: 40 });
+    if (s && !out.some(x => x.toLowerCase() === s.toLowerCase())) out.push(s);
+  }
+  return out.slice(0, 12);
+}
 
 // Fields a client may set on a transaction; everything else is system-managed
 function transactionFields(body, { partial = false } = {}) {
@@ -22,6 +45,11 @@ function transactionFields(body, { partial = false } = {}) {
     out.originalCurrency = cur;
     out.originalAmount = cur ? num(body.originalAmount, { field: 'originalAmount', required: true }) : undefined;
   }
+  if (has('tags')) out.tags = tagList(body.tags);
+  // Flags are stored only when set, so untouched rows stay small
+  if (has('excluded')) out.excluded = body.excluded ? true : null;
+  if (has('reimbursable')) out.reimbursable = body.reimbursable ? true : null;
+  if (has('reimbursedAt')) out.reimbursedAt = body.reimbursedAt === null || body.reimbursedAt === false ? null : isoDate(body.reimbursedAt === true ? new Date().toISOString() : body.reimbursedAt, { field: 'reimbursedAt' });
   return out;
 }
 
@@ -51,7 +79,9 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
       importedAt: new Date().toISOString(),
       manual: true,
     };
-    for (const k of ['card', 'notes', 'originalAmount', 'originalCurrency', 'fxRate']) if (txn[k] === undefined || txn[k] === null || txn[k] === '') delete txn[k];
+    for (const k of ['card', 'notes', 'originalAmount', 'originalCurrency', 'fxRate', 'excluded', 'reimbursable', 'reimbursedAt']) if (txn[k] === undefined || txn[k] === null || txn[k] === '') delete txn[k];
+    if (!txn.tags?.length) delete txn.tags;
+    if (txn.category) txn.category = resolve(redirectMap(store), txn.category);
     store.update('transactions', list => { list.push(txn); });
     if (txn.category) { txn.categorySource = 'user'; store.update('merchants', m => { m[txn.merchant] = txn.category; }); }
     res.json(txn);
@@ -67,20 +97,55 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
       const txn = list.find(t => t.id === req.params.id);
       if (!txn) return;
       for (const [k, v] of Object.entries(fields)) {
-        if (v === undefined || v === '' || v === null) delete txn[k]; else txn[k] = v;
+        if (v === undefined || v === '' || v === null || (Array.isArray(v) && !v.length)) delete txn[k]; else txn[k] = v;
       }
       if (fields.category === null) txn.category = null;
+      if (fields.reimbursable === null) delete txn.reimbursedAt;
       if ('category' in fields) { if (txn.category) txn.categorySource = 'user'; else delete txn.categorySource; }
       updated = txn;
     });
     res.json(updated);
   }));
 
+  // ---- Refunds ----
+  router.get('/transactions/:id/refund-candidates', (req, res) => {
+    const all = store.read('transactions');
+    const refund = all.find(t => t.id === req.params.id);
+    if (!refund) return res.status(404).json({ error: 'Not found' });
+    const taken = new Set(all.filter(t => t.refundOf && t.id !== refund.id).map(t => t.refundOf));
+    res.json({ candidates: refundCandidates(refund, all).map(c => ({ ...c, alsoRefunded: taken.has(c.id) })) });
+  });
+
+  // Link a refund to the purchase it reverses (purchaseId null unlinks)
+  router.post('/transactions/:id/refund-of', route((req, res) => {
+    const purchaseId = req.body.purchaseId ?? null;
+    let updated = null;
+    store.update('transactions', list => {
+      const refund = list.find(t => t.id === req.params.id);
+      if (!refund) throw Object.assign(new Error('Not found'), { status: 404 });
+      if (purchaseId === null) { delete refund.refundOf; updated = refund; return; }
+      if (!(refund.amount < 0)) throw bad('Only a refund (a credit) can be linked to a purchase');
+      const purchase = list.find(t => t.id === purchaseId);
+      if (!purchase || !(purchase.amount > 0)) throw bad('Pick a purchase to link this refund to');
+      if (Math.abs(refund.amount) > purchase.amount + 0.005) throw bad('The refund is larger than that purchase');
+      linkRefund(refund, purchase);
+      updated = refund;
+    });
+    res.json(updated);
+  }));
+
+  router.post('/cleanup/refunds', (_req, res) => {
+    let matched = 0;
+    store.update('transactions', list => { matched = autoMatchRefunds(list); });
+    res.json({ matched });
+  });
+
   router.delete('/transactions/:id', (req, res) => {
     let found = false;
     store.update('transactions', list => {
       const next = list.filter(t => t.id !== req.params.id);
       found = next.length !== list.length;
+      for (const t of next) if (t.refundOf === req.params.id) delete t.refundOf;
       return next;
     });
     if (!found) return res.status(404).json({ error: 'Not found' });
@@ -102,7 +167,7 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
   router.get('/dashboard', (req, res) => {
     const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : '';
     const txns = store.read('transactions');
-    res.json({ anomalies: anomalies(txns, month), insights: spendingInsights(txns, month), plaid: plaid.status() });
+    res.json({ anomalies: anomalies(txns, month), insights: spendingInsights(txns, month), plaid: plaid.status(), budget: month ? budgetFor(store, month) : null });
   });
 
   router.get('/summary', (_req, res) => {

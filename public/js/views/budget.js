@@ -1,4 +1,5 @@
 // Budget view: income, fixed expenses, targets and per-category limits.
+const catKey = cat => encodeURIComponent(cat).replace(/[^A-Za-z0-9]/g, '_');
 
 // ---- Budget Tab ----
 async function renderBudget() {
@@ -47,7 +48,7 @@ function renderBudgetOverview({ skipAI = false } = {}) {
   const month = state.budgetMonth;
   const incomeSources = state.income[month] || [];
   const fixedExpenses = state.expenses[month] || [];
-  const txns = state.transactions.filter(t => t.date?.startsWith(month));
+  const txns = state.transactions.filter(t => t.date?.startsWith(month) && countsAsSpend(t));
 
   const totalIncome = incomeSources.reduce((s, e) => s + e.amount, 0);
   const fixedTotal = fixedExpenses.reduce((s, e) => s + e.amount, 0);
@@ -277,7 +278,7 @@ async function generateBudgetInsight() {
 
   const incomeSources = state.income[month] || [];
   const fixedExpenses = state.expenses[month] || [];
-  const txns = state.transactions.filter(t => t.date?.startsWith(month));
+  const txns = state.transactions.filter(t => t.date?.startsWith(month) && countsAsSpend(t));
   const totalIncome = incomeSources.reduce((s, e) => s + e.amount, 0);
   const ccSpent = txns.reduce((s, t) => s + t.amount, 0);
   const catSpent = {};
@@ -301,7 +302,7 @@ async function generateBudgetInsight() {
 
 function renderBudgetBreakdown() {
   const month = state.budgetMonth;
-  const txns = state.transactions.filter(t => t.date?.startsWith(month));
+  const txns = state.transactions.filter(t => t.date?.startsWith(month) && countsAsSpend(t));
   const spent = {};
   for (const t of txns) { const cat = t.category || 'Uncategorized'; spent[cat] = (spent[cat] || 0) + t.amount; }
   const sortedCats = Object.entries(spent).sort((a, b) => b[1] - a[1]);
@@ -343,8 +344,8 @@ function renderBudgetBreakdown() {
     </div>`;
   }).join('');
 
-  const budgetFormHtml = CATEGORIES.map(cat => {
-    const key = btoa(cat).replace(/=/g, '');
+  const budgetFormHtml = selectableCategories().map(cat => {
+    const key = catKey(cat);
     const val = state.budgets[cat] || '';
     return `<div class="budget-row">
       <label class="budget-cat-label" for="budget-${key}">${esc(cat)}</label>
@@ -474,8 +475,8 @@ async function deleteExpense(id) {
 
 async function saveBudgets() {
   const budgets = {};
-  CATEGORIES.forEach(cat => {
-    const key = btoa(cat).replace(/=/g, '');
+  selectableCategories().forEach(cat => {
+    const key = catKey(cat);
     const val = parseFloat(document.getElementById(`budget-${key}`)?.value);
     if (!isNaN(val) && val > 0) budgets[cat] = val;
   });
@@ -500,8 +501,8 @@ async function suggestBudgets() {
       if (statusEl) statusEl.textContent = 'Not enough history yet.';
       return;
     }
-    CATEGORIES.forEach(cat => {
-      const key = btoa(cat).replace(/=/g, '');
+    selectableCategories().forEach(cat => {
+      const key = catKey(cat);
       const input = document.getElementById(`budget-${key}`);
       if (input && suggestions[cat]) input.value = suggestions[cat];
     });

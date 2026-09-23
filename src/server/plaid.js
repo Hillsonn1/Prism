@@ -8,7 +8,8 @@
 const crypto = require('crypto');
 const express = require('express');
 const { isPayment, isCardCredit, mapPlaidCategory, LOW_CONFIDENCE } = require('./categories');
-const { localCategory, dedupKeys, aiPass } = require('./importer');
+const { localCategory, dedupKeys, aiPass, applyRedirects } = require('./importer');
+const { autoMatchRefunds } = require('./refunds');
 
 const HOSTS = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
 const COUNTRY_CODES = ['US'];
@@ -56,6 +57,18 @@ function merchantLabel(p) {
   const words = enriched.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length >= 3);
   const rawKey = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '');
   return words.some(w => rawKey.includes(w)) ? enriched : rawName;
+}
+
+// Plaid's merchant logo, only when its merchant name was trusted (see merchantLabel)
+function logoFor(p) {
+  if (!p.merchant_name || merchantLabel(p) !== p.merchant_name) return undefined;
+  return p.logo_url || (p.counterparties || []).find(c => c.type === 'merchant' && c.logo_url)?.logo_url || undefined;
+}
+// Where the card was used, when the bank says
+function locationFor(p) {
+  const l = p.location;
+  if (!l || (!l.city && !l.country)) return undefined;
+  return { ...(l.city ? { city: l.city } : {}), ...(l.country ? { country: l.country } : {}) };
 }
 
 // Purchase date rather than posting date, so a charge keeps its date when it settles
@@ -164,13 +177,17 @@ function createPlaid({ store, openExternal = null, log = console, request = http
         plaidId: p.transaction_id,
         plaidAccountId: p.account_id,
         plaidCategory: p.personal_finance_category?.detailed || undefined,
+        logoUrl: logoFor(p),
+        location: locationFor(p),
         ...(p.pending ? { pending: true } : {}),
       });
     }
 
     const apiKey = store.read('settings').anthropicApiKey || null;
     if (unknown.size && apiKey) await aiPass(unknown, fresh, merchants, apiKey);
-    for (const t of fresh) delete t._raw;
+    for (const t of fresh) { delete t._raw; if (!t.logoUrl) delete t.logoUrl; if (!t.location) delete t.location; }
+    applyRedirects(store, fresh, merchants);
+    autoMatchRefunds([...store.read('transactions'), ...fresh]);
 
     // Phase 2: apply against the live store, so edits made meanwhile survive
     const transactions = store.read('transactions');
@@ -190,6 +207,9 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       row.amount = txnAmount(p);
       row.date = txnDate(p);
       if (p.pending) row.pending = true; else delete row.pending;
+      const logo = logoFor(p), loc = locationFor(p);
+      if (logo) row.logoUrl = logo;
+      if (loc) row.location = loc;
       result.updated++;
     }
     const removedIds = new Set(removed.map(r => r.transaction_id));
@@ -234,6 +254,36 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       item.lastError = null;
       return result;
     }
+  }
+
+  // Rows synced before logos and locations were kept: read the Item's history
+  // again from the start and fill those fields in. Nothing is added or removed.
+  async function enrichItem(item) {
+    const byId = new Map();
+    let cursor;
+    for (;;) {
+      const body = { access_token: token(item), count: 500, options: { include_personal_finance_category: true } };
+      if (cursor) body.cursor = cursor;
+      const page = await post('/transactions/sync', body);
+      for (const p of page.added || []) byId.set(p.transaction_id, p);
+      cursor = page.next_cursor;
+      if (!page.has_more) break;
+    }
+    let filled = 0;
+    store.update('transactions', list => {
+      for (const t of list) {
+        const p = t.plaidId && byId.get(t.plaidId);
+        if (!p) continue;
+        const logo = logoFor(p), loc = locationFor(p);
+        let touched = false;
+        if (logo && !t.logoUrl) { t.logoUrl = logo; touched = true; }
+        if (loc && !t.location) { t.location = loc; touched = true; }
+        if (!t.plaidCategory && p.personal_finance_category?.detailed) { t.plaidCategory = p.personal_finance_category.detailed; touched = true; }
+        if (touched) filled++;
+      }
+    });
+    item.enrichedAt = new Date().toISOString();
+    return filled;
   }
 
   // Statement balance, due date and minimum payment for each credit card.
@@ -282,9 +332,16 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       try {
         for (const item of items) {
           try {
+            const syncedBefore = Boolean(item.cursor);
             const r = await syncItem(item);
             for (const k of Object.keys(r)) totals[k] += r[k];
             await refreshLiabilities(item, { force: itemId !== null });
+            if (!item.enrichedAt) { // one-time backfill for rows synced before logos and locations were kept
+              if (syncedBefore) {
+                const filled = await enrichItem(item);
+                if (filled) totals.updated += filled;
+              } else item.enrichedAt = new Date().toISOString();
+            }
           } catch (err) {
             item.lastError = { code: err.plaidCode || 'ERROR', message: err.message, at: new Date().toISOString() };
             totals.errors++;
@@ -514,6 +571,19 @@ function createPlaid({ store, openExternal = null, log = console, request = http
     } catch (err) {
       error(res, err);
     }
+  });
+
+  // Pull logos and locations again for everything from this bank
+  router.post('/items/:itemId/enrich', async (req, res) => {
+    const { data, active } = itemsForCurrentEnv();
+    const item = active.find(i => i.itemId === req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Unknown bank connection' });
+    try {
+      const filled = await enrichItem(item);
+      store.write('plaid', data);
+      if (filled) state.changeCounter++;
+      res.json({ filled });
+    } catch (err) { error(res, err); }
   });
 
   router.put('/items/:itemId/accounts/:accountId', (req, res) => {

@@ -2,6 +2,7 @@
 // Local analysis of the transaction list: things worth a second look.
 // No network, no AI.
 
+const { isCounted } = require('./spend');
 const DAY = 86400000;
 
 // Same merchant and amount charged more than once within a few days
@@ -46,7 +47,8 @@ function newMerchants(all, month, minAmount = 150) {
     }));
 }
 
-function anomalies(all, month) {
+function anomalies(input, month) {
+  const all = input.filter(isCounted);
   if (!all.length) return [];
   const current = month ? all.filter(t => t.date?.startsWith(month)) : all;
   const out = duplicateCharges(current);
@@ -62,7 +64,8 @@ const sum = list => list.reduce((s, t) => s + t.amount, 0);
 const byCategory = list => { const out = {}; for (const t of list) { if (t.amount <= 0) continue; const c = t.category || 'Uncategorized'; out[c] = (out[c] || 0) + t.amount; } return out; };
 
 // Merchants charged in three or more months for about the same amount each time
-function recurringCharges(all) {
+function recurringCharges(input) {
+  const all = input.filter(isCounted);
   const byMerchant = new Map();
   for (const t of all) {
     if (t.amount <= 0 || !t.date) continue;
@@ -84,7 +87,8 @@ function recurringCharges(all) {
 }
 
 // Plain-language observations about a month (or all time). No network, no AI.
-function spendingInsights(all, month, today = new Date()) {
+function spendingInsights(input, month, today = new Date()) {
+  const all = input.filter(isCounted);
   const out = [];
   if (!all.length) return out;
   const spend = all.filter(t => t.amount > 0);

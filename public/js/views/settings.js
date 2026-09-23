@@ -44,6 +44,7 @@ async function renderSettings() {
   document.querySelectorAll('#theme-picker button').forEach(b => b.classList.toggle('btn-active', b.dataset.theme === theme));
 
   document.getElementById('categorize-btn').textContent = state.hasApiKey ? 'Run' : 'Run (no AI)';
+  renderCategorySettings();
 }
 
 async function saveSettings() {
@@ -260,6 +261,135 @@ async function recheckCategories() {
       showToast(`${plural(changed, 'purchase')} re-categorized`, 'success');
       await confirmDialog({ title: `${plural(changed, 'purchase')} re-categorized`, message: lines.join(' · ') + (Object.keys(changes).length > 6 ? ' · …' : ''), okText: 'OK', cancelText: 'Close' });
       rerenderCurrentView();
+    } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+  });
+}
+
+// ---- Categories ----
+let _iconNames = [];
+
+async function renderCategorySettings() {
+  const el = document.getElementById('categories-list');
+  if (!el) return;
+  try {
+    const data = await api('GET', '/api/categories');
+    setCategories(data.categories);
+    _iconNames = data.icons || [];
+  } catch { return; }
+  const counts = {};
+  for (const t of state.transactions) if (t.category) counts[t.category] = (counts[t.category] || 0) + 1;
+  const rows = state.categories.filter(c => c.name !== 'Unknown' || counts.Unknown);
+  el.innerHTML = html`${rows.map(c => {
+    const n = counts[c.name] || 0;
+    const merged = Boolean(c.redirect);
+    return html`
+      <div class="cat-row ${c.hidden ? 'cat-row-hidden' : ''}" id="cat-row-${catKey(c.name)}">
+        <button type="button" class="cat-icon-btn" style="--av:${c.color}" onclick="openIconPicker(event,'${escAttr(c.name)}')" title="Change icon" aria-label="Change icon for ${c.name}">${icon(c.icon)}</button>
+        <label class="cat-color" title="Change color"><input type="color" value="${c.color}" onchange="setCategoryColor('${escAttr(c.name)}', this.value)" aria-label="Color for ${c.name}" /><span class="cat-color-swatch" style="background:${c.color}"></span></label>
+        <div class="cat-main">
+          <div class="cat-name">${c.name}${c.builtIn ? '' : html` <span class="cat-custom">yours</span>`}${merged ? html` <span class="cat-custom">merged into ${c.redirect}</span>` : c.hidden ? html` <span class="cat-custom">hidden</span>` : ''}</div>
+          <div class="cat-meta muted">${n ? plural(n, 'purchase') : 'No purchases yet'}</div>
+        </div>
+        <div class="cat-actions">
+          ${merged
+            ? html`<button class="btn btn-sm btn-secondary" onclick="restoreCategory('${escAttr(c.name)}')">Restore</button>`
+            : html`
+              ${c.builtIn ? '' : html`<button class="icon-btn" onclick="renameCategory('${escAttr(c.name)}')" title="Rename" aria-label="Rename ${c.name}">${icon('pencil')}</button>`}
+              <button class="icon-btn" onclick="setCategoryHidden('${escAttr(c.name)}', ${c.hidden ? 'false' : 'true'})" title="${c.hidden ? 'Show in pickers' : 'Hide from pickers'}" aria-label="${c.hidden ? 'Show' : 'Hide'} ${c.name}">${icon(c.hidden ? 'eye' : 'eye-off')}</button>
+              <button class="icon-btn" onclick="mergeCategoryPrompt('${escAttr(c.name)}')" title="Merge into another category" aria-label="Merge ${c.name}">${icon('link')}</button>`}
+        </div>
+      </div>`;
+  })}`;
+}
+
+async function afterCategoryChange(msg) {
+  const settings = await api('GET', '/api/settings');
+  setCategories(settings.categories);
+  await loadAll();
+  clearAllCaches();
+  renderCategorySettings();
+  if (msg) showToast(msg, 'success');
+}
+
+async function addCategoryFromSettings() {
+  const name = await createCategoryFromPrompt();
+  if (name) afterCategoryChange(`"${name}" added`);
+}
+
+async function setCategoryColor(name, color) {
+  try { await api('PUT', `/api/categories/${encodeURIComponent(name)}`, { color }); afterCategoryChange(); }
+  catch (err) { showToast(err.message, 'error'); }
+}
+
+async function setCategoryHidden(name, hidden) {
+  try { await api('PUT', `/api/categories/${encodeURIComponent(name)}`, { hidden }); afterCategoryChange(hidden ? `"${name}" hidden from pickers` : `"${name}" is back in pickers`); }
+  catch (err) { showToast(err.message, 'error'); }
+}
+
+async function renameCategory(name) {
+  const to = await promptDialog({ title: 'Rename category', message: 'Every purchase, merchant and limit follows the new name.', label: 'Name', value: name, okText: 'Rename' });
+  if (!to || to === name) return;
+  try { await api('POST', '/api/categories/rename', { from: name, to }); afterCategoryChange(`Renamed to "${to}"`); }
+  catch (err) { showToast(err.message, 'error'); }
+}
+
+async function mergeCategoryPrompt(name) {
+  const options = state.categories.filter(c => c.name !== name && !c.redirect && c.name !== 'Unknown').map(c => ({ value: c.name, label: c.name }));
+  const to = await selectDialog({ title: `Merge "${name}" into…`, message: 'Its purchases, merchant memory and limit move over. A built-in category can be restored later.', label: 'Category', options, okText: 'Merge', danger: true });
+  if (!to) return;
+  try {
+    const r = await api('POST', '/api/categories/merge', { from: name, to });
+    afterCategoryChange(`${plural(r.moved, 'purchase')} moved to "${to}"`);
+  } catch (err) { showToast(err.message, 'error'); }
+}
+
+async function restoreCategory(name) {
+  try { await api('POST', '/api/categories/restore', { name }); afterCategoryChange(`"${name}" restored`); }
+  catch (err) { showToast(err.message, 'error'); }
+}
+
+function openIconPicker(e, name) {
+  e.stopPropagation();
+  const popup = document.getElementById('icon-popup');
+  const current = categoryIcon(name);
+  popup.innerHTML = html`<div class="icon-grid">${_iconNames.map(i => html`<button type="button" class="icon-choice ${i === current ? 'icon-choice-active' : ''}" onclick="setCategoryIcon('${escAttr(name)}','${i}')" title="${i}" aria-label="${i}">${icon(i)}</button>`)}</div>`;
+  const rect = e.currentTarget.getBoundingClientRect();
+  popup.style.display = 'block';
+  const w = popup.offsetWidth || 260, h = popup.offsetHeight || 200;
+  const below = rect.bottom + 6;
+  popup.style.top = (below + h > window.innerHeight - 8 ? Math.max(8, rect.top - 6 - h) : below) + 'px';
+  popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - w - 8)) + 'px';
+}
+function closeIconPicker() { const p = document.getElementById('icon-popup'); if (p) p.style.display = 'none'; }
+async function setCategoryIcon(name, iconName) {
+  closeIconPicker();
+  try { await api('PUT', `/api/categories/${encodeURIComponent(name)}`, { icon: iconName }); afterCategoryChange(); }
+  catch (err) { showToast(err.message, 'error'); }
+}
+document.addEventListener('click', e => { const p = document.getElementById('icon-popup'); if (p && !p.contains(e.target)) closeIconPicker(); });
+
+// ---- More clean-up ----
+async function matchRefunds() {
+  await withButton('refunds-btn', 'Matching…', async () => {
+    try {
+      const { matched } = await api('POST', '/api/cleanup/refunds');
+      clearAllCaches();
+      await loadAll();
+      showToast(matched ? `${plural(matched, 'refund')} linked to ${matched === 1 ? 'its purchase' : 'their purchases'}` : 'No unlinked refunds with a clear match', 'success');
+    } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+  });
+}
+
+async function fetchLogos() {
+  await withButton('logos-btn', 'Fetching…', async () => {
+    try {
+      const status = await api('GET', '/api/plaid/status');
+      const items = (status.items || []).filter(i => !i.env || i.env === status.env);
+      if (!items.length) { showToast('Connect a bank first — logos come from Plaid', 'info'); return; }
+      let filled = 0;
+      for (const item of items) filled += (await api('POST', `/api/plaid/items/${encodeURIComponent(item.itemId)}/enrich`)).filled || 0;
+      await loadAll();
+      showToast(filled ? `Details filled in on ${plural(filled, 'purchase')}` : 'Everything already had what Plaid offers', 'success');
     } catch (err) { showToast('Failed: ' + err.message, 'error'); }
   });
 }

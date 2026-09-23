@@ -29,6 +29,7 @@
         <a class="nav-link active" data-view="dashboard" href="#"><span class="nav-icon" data-icon="dashboard"></span><span>Dashboard</span></a>
         <a class="nav-link" data-view="transactions" href="#"><span class="nav-icon" data-icon="list"></span><span>Transactions</span></a>
         <a class="nav-link" data-view="budget" href="#"><span class="nav-icon" data-icon="wallet"></span><span>Budget</span></a>
+        <a class="nav-link" data-view="trips" href="#"><span class="nav-icon" data-icon="map-pin"></span><span>Trips</span></a>
         <a class="nav-link" data-view="upload" href="#"><span class="nav-icon" data-icon="download"></span><span>Import</span></a>
         <a class="nav-link" data-view="merchants" href="#"><span class="nav-icon" data-icon="store"></span><span>Merchants</span></a>
         <a class="nav-link" data-view="settings" href="#"><span class="nav-icon" data-icon="sliders"></span><span>Settings</span></a>
@@ -136,18 +137,31 @@
           <div class="filter-bar">
             <div class="filter-search">
               <span class="filter-search-icon" data-icon="search"></span>
-              <input type="search" id="filter-merchant" placeholder="Search merchants and notes" aria-label="Search" />
+              <input type="search" id="filter-merchant" placeholder="Search merchants, notes, tags" aria-label="Search" />
             </div>
             <select id="filter-category" aria-label="Category"><option value="">All categories</option></select>
             <select id="filter-card" aria-label="Card"><option value="">All cards</option></select>
+            <select id="filter-tag" aria-label="Tag" style="display:none"><option value="">All tags</option></select>
             <select id="filter-month" aria-label="Period" onchange="onMonthFilterSelect()"><option value="">Any time</option></select>
             <div class="filter-range">
               <input type="date" id="filter-date-from" oninput="onDateRangeChange()" aria-label="From date" />
               <span class="muted">–</span>
               <input type="date" id="filter-date-to" oninput="onDateRangeChange()" aria-label="To date" />
             </div>
+            <div class="filter-range filter-amounts">
+              <input type="number" id="filter-amount-min" placeholder="Min $" min="0" step="1" inputmode="decimal" aria-label="Minimum amount" />
+              <span class="muted">–</span>
+              <input type="number" id="filter-amount-max" placeholder="Max $" min="0" step="1" inputmode="decimal" aria-label="Maximum amount" />
+            </div>
+            <select id="filter-sort" aria-label="Sort" onchange="setSortMode(this.value)">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="largest">Largest first</option>
+              <option value="smallest">Smallest first</option>
+            </select>
             <button class="btn btn-secondary btn-sm" id="filter-clear" onclick="clearFilters()">Clear</button>
           </div>
+          <div class="chips" id="txn-chips"></div>
         </div>
         <div class="card table-card">
           <div id="transactions-empty" class="empty-state" style="display:none">
@@ -155,19 +169,19 @@
             <p>No transactions match these filters.</p>
             <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear filters</button>
           </div>
-          <table id="transactions-table" class="data-table">
-            <thead>
-              <tr>
-                <th class="sortable" data-col="date">Date <span class="sort-arrow"></span></th>
-                <th class="sortable" data-col="merchant">Merchant <span class="sort-arrow"></span></th>
-                <th class="sortable" data-col="amount">Amount <span class="sort-arrow"></span></th>
-                <th class="sortable" data-col="category">Category <span class="sort-arrow"></span></th>
-                <th style="width:90px"></th>
-              </tr>
-            </thead>
-            <tbody id="transactions-body"></tbody>
-          </table>
+          <div id="transactions-list" class="txn-list"></div>
         </div>
+      </div>
+
+      <div id="view-trips" class="view">
+        <div class="page-header">
+          <h1>Trips</h1>
+          <div class="header-actions">
+            <button class="btn btn-primary btn-sm" onclick="openTripModal()"><span data-icon="plus"></span> New trip</button>
+          </div>
+        </div>
+        <div id="trip-suggestions"></div>
+        <div id="trips-content"></div>
       </div>
 
       <div id="view-upload" class="view">
@@ -333,6 +347,15 @@
           </div>
         </div>
 
+        <div class="card" id="categories-card">
+          <div class="card-title-row">
+            <h2 class="card-title" style="margin-bottom:0">Categories</h2>
+            <button class="btn btn-secondary btn-sm" onclick="addCategoryFromSettings()"><span data-icon="plus"></span> New category</button>
+          </div>
+          <p class="muted card-lead">Give each category its color and icon, hide the ones you never use, or fold one into another. Your own categories can be renamed.</p>
+          <div id="categories-list" class="cat-list"></div>
+        </div>
+
         <div class="card">
           <h2 class="card-title">Cards</h2>
           <p class="muted card-lead">Rename a card and every transaction on it follows.</p>
@@ -369,6 +392,20 @@
                 <div class="muted cleanup-action-desc">Strips transaction codes, store numbers, and payment-processor prefixes from names imported by older versions.</div>
               </div>
               <button class="btn btn-secondary" id="normalize-btn" onclick="normalizeNames()">Tidy</button>
+            </div>
+            <div class="cleanup-action">
+              <div>
+                <div class="cleanup-action-title">Match refunds</div>
+                <div class="muted cleanup-action-desc">Links each refund to the purchase it reverses when the merchant and amount line up, so the pair shows together.</div>
+              </div>
+              <button class="btn btn-secondary" id="refunds-btn" onclick="matchRefunds()">Match</button>
+            </div>
+            <div class="cleanup-action" id="logos-action">
+              <div>
+                <div class="cleanup-action-title">Fetch merchant logos</div>
+                <div class="muted cleanup-action-desc">Asks your bank connection for logos and locations on purchases synced by older versions of Prism.</div>
+              </div>
+              <button class="btn btn-secondary" id="logos-btn" onclick="fetchLogos()">Fetch</button>
             </div>
             <div class="cleanup-action">
               <div>
@@ -492,19 +529,66 @@
           </div>
         </div>
         <p class="settings-hint" id="edit-fx-hint"></p>
-        <label class="edit-check"><input type="checkbox" id="edit-credit" /> This is a refund or credit</label>
+        <label class="edit-check"><input type="checkbox" id="edit-credit" onchange="onEditCreditChange()" /> This is a refund or credit</label>
         <div class="edit-field">
           <label class="edit-label" for="edit-category">Category</label>
           <select id="edit-category"></select>
         </div>
         <div class="edit-field">
-          <label class="edit-label" for="edit-notes">Note</label>
-          <input type="text" id="edit-notes" placeholder="e.g. birthday dinner, work reimbursable" />
+          <label class="edit-label" for="edit-tag-input">Tags</label>
+          <div class="tag-editor" onclick="document.getElementById('edit-tag-input').focus()">
+            <span id="edit-tags"></span>
+            <input type="text" id="edit-tag-input" list="tag-suggestions" placeholder="Add a tag…" autocomplete="off" onkeydown="onTagInputKey(event)" onchange="onTagInputChange(event)" />
+            <datalist id="tag-suggestions"></datalist>
+          </div>
         </div>
+        <div class="edit-field">
+          <label class="edit-label" for="edit-notes">Note</label>
+          <input type="text" id="edit-notes" placeholder="e.g. birthday dinner, split with Dan" />
+        </div>
+        <div class="edit-flags">
+          <label class="edit-check"><input type="checkbox" id="edit-excluded" onchange="onEditFlagsChange()" /><span>Leave out of my spending <span class="muted">— bought for someone else, a transfer…</span></span></label>
+          <label class="edit-check"><input type="checkbox" id="edit-reimbursable" onchange="onEditFlagsChange()" /><span>Someone owes me this <span class="muted">— kept out of totals until it's paid back</span></span></label>
+          <label class="edit-check edit-check-sub" id="edit-reimbursed-wrap" style="display:none"><input type="checkbox" id="edit-reimbursed" /><span>Paid back</span></label>
+        </div>
+        <div id="edit-refund" class="edit-field" style="display:none"></div>
+        <div id="edit-refunded" class="edit-field" style="display:none"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeEditModal()">Cancel</button>
         <button class="btn btn-primary" onclick="saveEditModal()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trip -->
+  <div id="trip-modal-overlay" class="modal-overlay" style="display:none">
+    <div class="modal dialog" role="dialog" aria-modal="true" aria-labelledby="trip-modal-title">
+      <div class="modal-header">
+        <h2 id="trip-modal-title">New trip</h2>
+        <p class="modal-subtitle">Purchases in these dates get the trip's tag. Subscriptions and bills that keep running at home are left out.</p>
+      </div>
+      <div class="modal-body">
+        <div class="edit-field">
+          <label class="edit-label" for="trip-name">Name</label>
+          <input type="text" id="trip-name" placeholder="e.g. Thailand, Bangkok with Dan" />
+        </div>
+        <div class="edit-grid">
+          <div class="edit-field">
+            <label class="edit-label" for="trip-start">From</label>
+            <input type="date" id="trip-start" />
+          </div>
+          <div class="edit-field">
+            <label class="edit-label" for="trip-end">To</label>
+            <input type="date" id="trip-end" />
+          </div>
+        </div>
+        <label class="edit-check" id="trip-include-all-wrap"><input type="checkbox" id="trip-include-all" /> Include everything in these dates, subscriptions too</label>
+        <p class="settings-hint" id="trip-modal-hint"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeTripModal()">Cancel</button>
+        <button class="btn btn-primary" id="trip-save-btn" onclick="saveTripModal()">Create trip</button>
       </div>
     </div>
   </div>
@@ -523,6 +607,9 @@
       </div>
     </div>
   </div>
+
+  <!-- Icon picker for categories -->
+  <div id="icon-popup" class="category-popup icon-popup" style="display:none" role="dialog" aria-label="Choose an icon"></div>
 
   <!-- Inline edit category dropdown (shared) -->
   <div id="category-popup" class="category-popup" style="display:none" role="dialog" aria-label="Change category">
@@ -562,6 +649,7 @@
   <script src="js/views/transactions.js"></script>
   <script src="js/views/upload.js"></script>
   <script src="js/views/budget.js"></script>
+  <script src="js/views/trips.js"></script>
   <script src="js/views/merchants.js"></script>
   <script src="js/views/settings.js"></script>
   <script src="js/views/plaid.js"></script>

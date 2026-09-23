@@ -1,7 +1,19 @@
 // Dashboard view.
 
 const prevMonthOf = m => { const [y, mo] = m.split('-').map(Number); const d = new Date(y, mo - 2, 1); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; };
-const spendOf = list => list.filter(t => t.amount > 0).reduce((s, t) => s + t.amount, 0);
+const spendOf = list => list.filter(t => t.amount > 0 && countsAsSpend(t)).reduce((s, t) => s + t.amount, 0);
+// Spend per month for the six months ending at `month`, optionally for one category
+function monthlySeries(month, category = null) {
+  const months = monthsEndingAt(month, 6);
+  const totals = Object.fromEntries(months.map(m => [m, 0]));
+  for (const t of state.transactions) {
+    const m = t.date?.slice(0, 7);
+    if (!(m in totals) || t.amount <= 0 || !countsAsSpend(t)) continue;
+    if (category && (t.category || 'Uncategorized') !== category) continue;
+    totals[m] += t.amount;
+  }
+  return months.map(m => totals[m]);
+}
 
 // First visit lands on the current month (or the latest one with data)
 function defaultDashboardMonth(allMonths) {
@@ -41,7 +53,7 @@ function renderDashboard() {
   const uncategorized = txns.filter(t => !t.category);
   const catTotals = {};
   for (const t of txns) {
-    if (t.amount <= 0) continue;
+    if (t.amount <= 0 || !countsAsSpend(t)) continue;
     const c = t.category || 'Uncategorized';
     catTotals[c] = (catTotals[c] || 0) + t.amount;
   }
@@ -59,6 +71,7 @@ function renderDashboard() {
       value: fmt(total),
       sub: delta === null ? plural(txns.length, 'purchase')
         : html`<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}%</span> vs ${fmtMonth(prevMonthOf(month), 'short')}`,
+      spark: monthlySeries(month),
       bar: target ? { pct: Math.min(total / target, 1), over: total > target, warn: total / target > 0.85, note: total > target ? `${fmt(total - target)} over the ${fmt(target)} target` : `${fmt(target - total)} left of ${fmt(target)}` } : null,
     });
     if (isCurrent) {
@@ -74,20 +87,13 @@ function renderDashboard() {
     tiles.push({ label: 'Monthly average', value: fmt(total / Math.max(months, 1)), sub: 'across all months' });
   }
   tiles.push(topCat
-    ? { label: 'Biggest category', value: topCat[0], sub: `${fmt(topCat[1])} · ${Math.round(topCat[1] / total * 100)}%`, small: true, action: `drillCategory('${escAttr(topCat[0])}')`, color: categoryColor(topCat[0]) }
+    ? { label: 'Biggest category', value: topCat[0], sub: `${fmt(topCat[1])} · ${Math.round(topCat[1] / total * 100)}%`, small: true, action: `drillCategory('${escAttr(topCat[0])}')`, color: categoryColor(topCat[0]), spark: month ? monthlySeries(month, topCat[0]) : null }
     : { label: 'Biggest category', value: '—', sub: '' });
   const uncatMerchants = new Set(uncategorized.map(t => t.merchant)).size;
-  tiles.push(uncategorized.length
-    ? { label: 'Needs a category', value: String(uncategorized.length), sub: html`${plural(uncatMerchants, 'merchant')} · <b>categorize</b>`, action: 'openUncategorizedModal()', attention: true }
-    : { label: 'Categorized', value: '100%', sub: 'everything is sorted', good: true });
+  // Only asks for attention when something needs it
+  if (uncategorized.length) tiles.push({ label: 'Needs a category', value: String(uncategorized.length), sub: html`${plural(uncatMerchants, 'merchant')} · <b>categorize</b>`, action: 'openUncategorizedModal()', attention: true });
 
-  document.getElementById('summary-cards').innerHTML = html`${tiles.map(t => html`
-    <div class="stat-tile ${t.action ? 'stat-clickable' : ''} ${t.attention ? 'stat-attention' : ''} ${t.good ? 'stat-good' : ''}" ${t.action ? raw(`onclick="${t.action}" role="button" tabindex="0"`) : ''}>
-      <div class="stat-label">${t.label}</div>
-      <div class="stat-value ${t.small ? 'stat-value-sm' : ''}" ${t.color ? raw(`style="color:${t.color}"`) : ''}>${t.value}</div>
-      <div class="stat-sub">${t.sub}</div>
-      ${t.bar ? html`<div class="stat-bar"><div class="stat-bar-fill ${t.bar.over ? 'over' : t.bar.warn ? 'warn' : ''}" style="width:${(t.bar.pct * 100).toFixed(1)}%"></div></div><div class="stat-bar-note">${t.bar.note}</div>` : ''}
-    </div>`)}`;
+  document.getElementById('summary-cards').innerHTML = html`${tiles.map(t => statTile(t))}`;
 
   // ---- Category breakdown ----
   document.getElementById('category-note').textContent = month ? fmtMonth(month) : 'All time';
@@ -104,10 +110,12 @@ function renderDashboard() {
       else if (pct > .8) { barColor = 'var(--warning)'; extra = html` <span class="budget-amt">/ ${fmt(budget)}</span>`; }
       else extra = html` <span class="budget-amt">/ ${fmt(budget)}</span>`;
     }
+    const series = month ? monthlySeries(month, cat) : null;
     return html`
       <div class="chart-row chart-clickable" onclick="drillCategory('${escAttr(cat)}')" title="See ${cat} transactions">
-        <div class="chart-label">${cat}</div>
+        <div class="chart-label"><span class="chart-label-icon" style="color:${categoryColor(cat)}">${icon(categoryIcon(cat))}</span>${cat}</div>
         <div class="chart-bar-wrap"><div class="chart-bar" style="width:${animate ? 0 : (amt / max * 100).toFixed(1) + '%'};background:${barColor}" data-w="${(amt / max * 100).toFixed(1)}%"></div></div>
+        ${series && series.filter(Boolean).length > 1 ? html`<span class="chart-spark" title="Last 6 months">${sparkline(series, { width: 48, height: 16, color: categoryColor(cat) })}</span>` : html`<span class="chart-spark"></span>`}
         <div class="chart-amount">${fmt(amt)}${extra}</div>
       </div>`;
   })}`;
@@ -116,7 +124,7 @@ function renderDashboard() {
   const monthTotals = {};
   for (const t of state.transactions) {
     const m = t.date?.slice(0, 7);
-    if (m && t.amount > 0) monthTotals[m] = (monthTotals[m] || 0) + t.amount;
+    if (m && t.amount > 0 && countsAsSpend(t)) monthTotals[m] = (monthTotals[m] || 0) + t.amount;
   }
   const allTrendMonths = Object.keys(monthTotals).sort();
   const trendMonths = state.trendShowAll ? allTrendMonths : allTrendMonths.slice(-6);
@@ -138,7 +146,8 @@ function renderDashboard() {
 
   const recent = [...txns].sort((a, b) => b.date.localeCompare(a.date) || (b.importedAt || '').localeCompare(a.importedAt || '')).slice(0, 7);
   document.getElementById('recent-transactions').innerHTML = html`${recent.map(t => html`
-    <div class="recent-row" onclick="openEditModal('${t.id}')" title="Edit">
+    <div class="recent-row ${countsAsSpend(t) ? '' : 'txn-item-out'}" onclick="openEditModal('${t.id}')" title="Edit">
+      ${merchantAvatar(t.merchant, { logoUrl: t.logoUrl, category: t.category, size: 'sm' })}
       <div class="recent-main">
         <div class="recent-merchant">${t.merchant}${t.pending ? html` <span class="txn-pending-badge">pending</span>` : ''}</div>
         <div class="recent-date">${fmtDate(t.date)}${t.category ? html` · <span style="color:${categoryColor(t.category)}">${t.category}</span>` : html` · <span class="muted">uncategorized</span>`}</div>
@@ -153,6 +162,17 @@ function renderDashboard() {
   if (animate) requestAnimationFrame(() => {
     document.querySelectorAll('.chart-bar[data-w]').forEach(b => { b.style.width = b.dataset.w; });
   });
+}
+
+function statTile(t) {
+  return html`
+    <div class="stat-tile ${t.cls || ''} ${t.action ? 'stat-clickable' : ''} ${t.attention ? 'stat-attention' : ''} ${t.good ? 'stat-good' : ''} ${t.over ? 'stat-overdue' : ''}" ${t.action ? raw(`onclick="${t.action}" role="button" tabindex="0"`) : ''}>
+      ${t.spark && t.spark.some(Boolean) ? html`<span class="stat-spark" style="color:${t.color || 'var(--accent)'}">${sparkline(t.spark, { width: 56, height: 20 })}</span>` : ''}
+      <div class="stat-label">${t.label}</div>
+      <div class="stat-value ${t.small ? 'stat-value-sm' : ''}" ${t.color ? raw(`style="color:${t.color}"`) : ''}>${t.value}</div>
+      <div class="stat-sub">${t.sub}</div>
+      ${t.bar ? html`<div class="stat-bar"><div class="stat-bar-fill ${t.bar.over ? 'over' : t.bar.warn ? 'warn' : ''}" style="width:${(t.bar.pct * 100).toFixed(1)}%"></div></div><div class="stat-bar-note">${t.bar.note}</div>` : ''}
+    </div>`;
 }
 
 // Anomalies, insights and card due dates come from one request and paint together
@@ -172,6 +192,55 @@ async function renderAsyncWidgets() {
   displayAnomalies(d.anomalies || []);
   renderInsights(d.insights || []);
   renderCardsDue(d.plaid);
+  renderSafeToSpendTile(d.budget);
+  renderOwedTile();
+}
+
+// What's left of this month's income after fixed expenses and what's already spent, per remaining day
+function renderSafeToSpendTile(budget) {
+  const tiles = document.getElementById('summary-cards');
+  if (!tiles) return;
+  tiles.querySelector('.stat-tile-safe')?.remove();
+  const month = state.dashboardMonth;
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  if (!budget || month !== thisMonth) return;
+  const spent = spendOf(state.transactions.filter(t => t.date?.startsWith(month)));
+  const today = new Date();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const daysLeft = daysInMonth - today.getDate() + 1;
+  let t;
+  if (!budget.hasIncome) {
+    t = { cls: 'stat-tile-safe', label: 'Safe to spend', value: '—', sub: html`Add your income in <b>Budget</b> to see this`, action: "switchView('budget')" };
+  } else {
+    const left = budget.income - budget.fixed - spent;
+    const perDay = left / Math.max(daysLeft, 1);
+    t = left < 0
+      ? { cls: 'stat-tile-safe', label: 'Safe to spend', value: fmt(0), sub: html`<b>${fmt(-left)} over</b> this month's income after ${fmt(budget.fixed)} fixed`, over: true, action: "switchView('budget')" }
+      : { cls: 'stat-tile-safe', label: 'Safe to spend', value: `${fmt(perDay)}/day`, sub: `${fmt(left)} left · ${plural(daysLeft, 'day')} to go`, action: "switchView('budget')", bar: { pct: Math.min(spent / Math.max(budget.income - budget.fixed, 1), 1), warn: spent / Math.max(budget.income - budget.fixed, 1) > 0.85, over: false, note: `${fmt(budget.income)} income − ${fmt(budget.fixed)} fixed` } };
+  }
+  const el = document.createElement('div');
+  el.innerHTML = statTile(t);
+  const node = el.firstElementChild;
+  const first = tiles.querySelector('.stat-tile');
+  if (first?.nextSibling) tiles.insertBefore(node, first.nextSibling); else tiles.appendChild(node);
+}
+
+// Purchases someone still owes you for
+function renderOwedTile() {
+  const tiles = document.getElementById('summary-cards');
+  if (!tiles) return;
+  tiles.querySelector('.stat-tile-owed')?.remove();
+  const owed = state.transactions.filter(t => t.reimbursable && !t.reimbursedAt);
+  if (!owed.length) return;
+  const total = owed.reduce((s, t) => s + t.amount, 0);
+  const el = document.createElement('div');
+  el.innerHTML = statTile({ cls: 'stat-tile-owed', label: 'Owed to you', value: fmt(total), sub: html`${plural(owed.length, 'purchase')} · <b>see them</b>`, action: 'showOwed()' });
+  tiles.appendChild(el.firstElementChild);
+}
+function showOwed() {
+  clearFilterInputs();
+  state.quickFilters.add('reimbursable');
+  switchView('transactions');
 }
 
 // ---- Anomalies ----
@@ -294,11 +363,13 @@ function renderTopMerchants(txns) {
   const el = document.getElementById('top-merchants');
   if (!el) return;
   const totals = {};
-  for (const t of txns) totals[t.merchant] = (totals[t.merchant] || 0) + t.amount;
+  const cats = {};
+  for (const t of txns) { if (!countsAsSpend(t)) continue; totals[t.merchant] = (totals[t.merchant] || 0) + t.amount; if (t.category && !cats[t.merchant]) cats[t.merchant] = t.category; }
   const top = Object.entries(totals).sort((a, b) => b[1] - a[1]).slice(0, 6);
   el.innerHTML = top.length
     ? html`${top.map(([merchant, amt]) => html`
       <div class="top-merchant-row" onclick="jumpToMerchant('${escAttr(merchant)}')" title="View ${merchant} transactions">
+        ${merchantAvatar(merchant, { category: cats[merchant], size: 'sm' })}
         <div class="top-merchant-name">${merchant}</div>
         <div class="top-merchant-amt">${fmt(amt)}</div>
       </div>`)}`
@@ -327,7 +398,7 @@ function renderRecurring() {
   const byMerchant = new Map();
   for (const t of state.transactions) {
     const m = t.date?.slice(0, 7);
-    if (!m || t.amount <= 0) continue;
+    if (!m || t.amount <= 0 || !countsAsSpend(t)) continue;
     const months = byMerchant.get(t.merchant) || byMerchant.set(t.merchant, new Map()).get(t.merchant);
     months.set(m, [...(months.get(m) || []), t.amount]);
   }

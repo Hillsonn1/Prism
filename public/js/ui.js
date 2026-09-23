@@ -43,7 +43,7 @@ function _dialogEl() {
   return el;
 }
 function _readDialog() {
-  const input = document.getElementById('app-dialog-input');
+  const input = document.getElementById('app-dialog-input') || document.getElementById('app-dialog-select');
   const check = document.getElementById('app-dialog-check');
   return { ok: true, value: input ? input.value.trim() : undefined, checked: check ? check.checked : undefined };
 }
@@ -96,6 +96,17 @@ async function promptDialog({ title, message, label = '', value = '', placeholde
   const el = document.getElementById('app-dialog-input');
   if (el) requestAnimationFrame(() => el.select && el.select());
   return r.value ?? null;
+}
+
+// selectDialog({ title, message, label, options: [{ value, label }], value, okText }) → value or null
+async function selectDialog({ title, message, label = '', options = [], value = '', okText = 'OK', danger = false }) {
+  const body = html`
+    <div class="edit-field">
+      ${label ? html`<label class="edit-label" for="app-dialog-select">${label}</label>` : ''}
+      <select id="app-dialog-select">${options.map(o => html`<option value="${o.value}" ${o.value === value ? 'selected' : ''}>${o.label}</option>`)}</select>
+    </div>`;
+  const r = await _openDialog({ title, message, body, okText, danger });
+  return r ? (r.value ?? null) : null;
 }
 
 // Themes: 'system' | 'light' | 'dark'

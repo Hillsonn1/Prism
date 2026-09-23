@@ -50,6 +50,8 @@ function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null
   app.use('/api', require('./routes/import')({ store, uploadsDir, apiKey, fx }));
   app.use('/api', require('./routes/budget')({ store, apiKey }));
   app.use('/api', require('./routes/settings')({ store, version, apiKey, fx, dataDir, openFolder, secrets }));
+  app.use('/api', require('./routes/categories')({ store }));
+  app.use('/api', require('./routes/trips')({ store }));
   app.use('/api/plaid', plaid.router);
   app.use('/api', (req, res) => res.status(404).json({ error: `No such endpoint: ${req.method} ${req.path}` }));
   // eslint-disable-next-line no-unused-vars
