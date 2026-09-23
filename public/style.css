@@ -11,8 +11,12 @@
   --surface: #ffffff;
   --surface-2: #f6f6f8;
   --surface-3: #ececef;
-  --sidebar-bg: #f0f0f3;
-  --sidebar-border: rgba(0, 0, 0, .06);
+  --sidebar-bg: #394c66;          /* matches the wordmark's background */
+  --sidebar-border: rgba(255, 255, 255, .08);
+  --sidebar-text: #dfe5ee;
+  --sidebar-muted: #9aa8bb;
+  --sidebar-hover: rgba(255, 255, 255, .07);
+  --sidebar-active: rgba(255, 255, 255, .14);
 
   --text: #1d1d1f;
   --text-2: #3a3a3c;
@@ -75,7 +79,6 @@
   --ai-soft-text: var(--ai);
   --info-bg: var(--info-soft);
   --info-text: var(--accent);
-  --sidebar-text: var(--text-2);
   --on-primary: var(--on-accent);
   --shadow: var(--shadow-1);
   color-scheme: light;
@@ -86,8 +89,8 @@
   --surface: #1b1b1e;
   --surface-2: #232327;
   --surface-3: #2c2c31;
-  --sidebar-bg: #141416;
-  --sidebar-border: rgba(255, 255, 255, .06);
+  --sidebar-bg: #394c66;
+  --sidebar-border: rgba(255, 255, 255, .08);
 
   --text: #f5f5f7;
   --text-2: #d1d1d6;
@@ -170,54 +173,50 @@ input:focus-visible, select:focus-visible, textarea:focus-visible { outline: non
   position: fixed;
   top: 0; left: 0; bottom: 0;
   z-index: 100;
-  border-right: 1px solid var(--sidebar-border);
 }
-.sidebar-brand { display: flex; align-items: center; justify-content: flex-start; padding: 1.15rem 1.15rem .6rem; }
-.brand { display: flex; align-items: center; gap: .55rem; color: var(--text); text-decoration: none; }
-.brand-mark { width: 26px; height: 26px; display: block; }
-.brand-name { font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
-.brand-logo-full { width: 200px; object-fit: contain; }
+.sidebar-brand { display: flex; align-items: center; justify-content: center; padding: .9rem .75rem .4rem; }
+.brand { display: block; text-decoration: none; border-radius: var(--radius-sm); }
+.brand-logo-full { width: 190px; height: auto; display: block; }
 
 .back-btn {
   display: flex; align-items: center; gap: .35rem;
   margin: 0 .75rem .1rem; padding: .35rem .55rem;
-  background: none; border: none; color: var(--muted); font-size: .78rem; font-weight: 500; font-family: inherit;
+  background: none; border: none; color: var(--sidebar-muted); font-size: .78rem; font-weight: 500; font-family: inherit;
   border-radius: var(--radius-sm); cursor: pointer; height: 28px;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.back-btn:hover { background: var(--surface-3); color: var(--text); }
+.back-btn:hover { background: var(--sidebar-hover); color: #fff; }
 .back-btn .icon { width: 14px; height: 14px; }
 
 .sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: .35rem .75rem; }
 .nav-link {
   display: flex; align-items: center; gap: .65rem;
   padding: .5rem .7rem; border-radius: var(--radius-sm);
-  color: var(--text-2); text-decoration: none; font-size: .875rem; font-weight: 500;
+  color: var(--sidebar-text); text-decoration: none; font-size: .875rem; font-weight: 500;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.nav-link:hover { background: var(--surface-3); color: var(--text); }
-.nav-link.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
-.nav-icon { display: inline-flex; width: 18px; height: 18px; color: var(--muted); }
+.nav-link:hover { background: var(--sidebar-hover); color: #fff; }
+.nav-link.active { background: var(--sidebar-active); color: #fff; font-weight: 600; }
+.nav-icon { display: inline-flex; width: 18px; height: 18px; color: var(--sidebar-muted); }
 .nav-icon .icon { width: 18px; height: 18px; }
-.nav-link:hover .nav-icon { color: var(--text-2); }
-.nav-link.active .nav-icon { color: var(--accent); }
+.nav-link:hover .nav-icon, .nav-link.active .nav-icon { color: #fff; }
 
 .sidebar-footer { margin-top: auto; padding: .75rem .9rem .9rem; border-top: 1px solid var(--sidebar-border); }
 .sidebar-status {
   display: flex; align-items: center; gap: .5rem; width: 100%;
-  background: none; border: none; color: var(--muted); font-size: .76rem; font-weight: 500; font-family: inherit;
+  background: none; border: none; color: var(--sidebar-muted); font-size: .76rem; font-weight: 500; font-family: inherit;
   cursor: pointer; padding: .35rem .45rem; border-radius: var(--radius-sm); text-align: left;
   transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
 }
-.sidebar-status:hover { background: var(--surface-3); color: var(--text); }
+.sidebar-status:hover { background: var(--sidebar-hover); color: #fff; }
 .sidebar-status .icon { width: 15px; height: 15px; }
-.sidebar-status.has-error { color: var(--warning-text); }
-.sidebar-version { font-size: .68rem; color: var(--muted-2); padding: .3rem .45rem 0; }
+.sidebar-status.has-error { color: #ffc266; }
+.sidebar-version { font-size: .68rem; color: var(--sidebar-muted); opacity: .7; padding: .3rem .45rem 0; }
 
 .main-content { margin-left: var(--sidebar-w); flex: 1; padding: 2rem 2.25rem 3rem; max-width: 1240px; min-width: 0; }
 
 /* macOS desktop: the top strip doubles as the title bar */
-:root[data-electron="true"][data-platform="mac"] .sidebar-brand { padding-top: 2.75rem; -webkit-app-region: drag; }
+:root[data-electron="true"][data-platform="mac"] .sidebar-brand { padding-top: 2.6rem; -webkit-app-region: drag; }
 :root[data-electron="true"][data-platform="mac"] .brand { -webkit-app-region: no-drag; }
 :root[data-electron="true"][data-platform="mac"] .page-header { -webkit-app-region: drag; }
 :root[data-electron="true"][data-platform="mac"] .page-header * { -webkit-app-region: no-drag; }
@@ -822,7 +821,8 @@ input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px;
 @media (max-width: 760px) {
   :root { --sidebar-w: 64px; }
   .sidebar-brand { justify-content: center; padding-left: 0; padding-right: 0; }
-  .brand-name, .nav-link span:not(.nav-icon), .sidebar-status span, .sidebar-version, .back-btn span { display: none; }
+  .brand-logo-full { width: 44px; height: 44px; object-fit: cover; object-position: 0 50%; } /* just the card from the wordmark */
+  .nav-link span:not(.nav-icon), .sidebar-status span, .sidebar-version, .back-btn span { display: none; }
   .nav-link { justify-content: center; padding: .6rem; }
   .main-content { padding: 1.25rem 1rem 2rem; }
   .chart-label { flex-basis: 110px; }
