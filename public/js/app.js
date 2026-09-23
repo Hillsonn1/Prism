@@ -1,6 +1,8 @@
 // Startup.
 
 mountIcons();
+if (navigator.userAgent.includes('Electron')) document.documentElement.dataset.electron = 'true';
+if (navigator.platform.startsWith('Mac')) document.documentElement.dataset.platform = 'mac';
 
 (async () => {
   try {
@@ -11,6 +13,7 @@ mountIcons();
   }
   renderDashboard();
   checkForUpdate();
+  api('GET', '/api/version').then(v => { const el = document.getElementById('sidebar-version'); if (el) el.textContent = `Prism ${v.version}`; }).catch(() => {});
   pollPlaidChanges();
   setInterval(pollPlaidChanges, 60000);
 })();

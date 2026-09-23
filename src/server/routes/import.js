@@ -7,9 +7,9 @@ const crypto = require('crypto');
 const express = require('express');
 const multer = require('multer');
 const { parseCSV, parsePDF } = require('../parsers/statements');
-const { importRows, categorizeUncategorized } = require('../importer');
+const { importRows, categorizeUncategorized, recheckCategories } = require('../importer');
 const { quickNormalizeName } = require('../normalize');
-const { isPayment } = require('../categories');
+const { isPayment, isCardCredit } = require('../categories');
 const { mergeProposals } = require('../dedupe');
 const ai = require('../ai');
 const { str, route } = require('../validate');
@@ -128,21 +128,29 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey, fx }) {
   router.post('/cleanup/payments', (_req, res) => {
     let removed = 0;
     store.update('transactions', list => {
-      const next = list.filter(t => !isPayment(t.merchant) && !isPayment(t.rawSource || ''));
+      const next = list.filter(t => !isPayment(t.merchant) && !isPayment(t.rawSource || '') && !isCardCredit(t.rawSource || t.merchant, t.amount, t.plaidCategory));
       removed = list.length - next.length;
       return next;
     });
     res.json({ removed });
   });
 
+  // Re-derive names with the current normalizer. When the stored name shares
+  // nothing with the bank's descriptor (a bad enrichment), start from the descriptor.
   router.post('/cleanup/normalize', (_req, res) => {
     const renames = new Map();
+    const words = str => String(str || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length >= 3);
     for (const t of store.read('transactions')) {
-      const normalized = quickNormalizeName(t.merchant);
-      if (normalized !== t.merchant) renames.set(t.merchant, normalized);
+      const rawKey = String(t.rawSource || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+      const related = !t.rawSource || words(t.merchant).some(w => rawKey.includes(w));
+      const fromRaw = t.rawSource ? quickNormalizeName(t.rawSource) : null;
+      let normalized = related ? quickNormalizeName(t.merchant) : fromRaw;
+      // The descriptor, cleaned with today's rules, is a shorter version of the stored name: take it
+      if (related && fromRaw && fromRaw.length < normalized.length && normalized.toLowerCase().startsWith(fromRaw.toLowerCase())) normalized = fromRaw;
+      if (normalized && normalized !== t.merchant) renames.set(t.merchant, normalized);
     }
     const updated = applyRenames(store, renames);
-    res.json({ updated });
+    res.json({ updated, renamed: renames.size });
   });
 
   // Smart Clean: propose merges locally, apply only what the user kept
@@ -171,6 +179,11 @@ module.exports = function importRoutes({ store, uploadsDir, apiKey, fx }) {
     const merged = applyRenames(store, new Map(Object.entries(mapping)));
     res.json({ merged, mapping });
   }));
+
+  // Re-run the rules over automatic categories (never over the user's own choices)
+  router.post('/cleanup/recheck', (_req, res) => {
+    res.json(recheckCategories(store));
+  });
 
   // Works without a key (rules and memory only); with one, Claude handles the rest
   router.get('/cleanup/categorize/stream', async (_req, res) => {

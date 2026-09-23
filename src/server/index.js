@@ -10,6 +10,7 @@ const { createPlaid } = require('./plaid');
 const { createFx } = require('./fx');
 const { createSecrets } = require('./secrets');
 const { toTitleCase } = require('./normalize');
+const { inferCategorySources } = require('./importer');
 
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const { version } = require('../../package.json');
@@ -33,6 +34,7 @@ function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null
   fs.mkdirSync(uploadsDir, { recursive: true });
   const store = new Store(dataDir);
   migrate(store);
+  inferCategorySources(store);
   const secrets = createSecrets(safeStorage);
   secrets.migrate(store);
 

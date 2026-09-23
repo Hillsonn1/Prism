@@ -22,7 +22,7 @@
         <a class="nav-link" data-view="merchants" href="#"><span class="nav-icon" data-icon="store"></span> Merchants</a>
         <a class="nav-link" data-view="settings" href="#"><span class="nav-icon" data-icon="sliders"></span> Settings</a>
       </nav>
-      <div class="sidebar-footer" id="sidebar-footer"></div>
+      <div class="sidebar-footer"><div id="sidebar-footer"></div><div class="sidebar-version" id="sidebar-version"></div></div>
     </aside>
 
     <main class="main-content">
@@ -340,6 +340,13 @@
             </div>
             <div class="cleanup-action">
               <div>
+                <div class="cleanup-action-title">Re-check categories</div>
+                <div class="muted cleanup-action-desc">Runs the latest rules over categories Prism guessed on its own. Anything you set yourself is left exactly as it is.</div>
+              </div>
+              <button class="btn btn-secondary" id="recheck-btn" onclick="recheckCategories()">Re-check</button>
+            </div>
+            <div class="cleanup-action">
+              <div>
                 <div class="cleanup-action-title">Categorize the rest</div>
                 <div class="muted cleanup-action-desc">Applies your merchant memory and the built-in rules to anything still uncategorized. With an API key, Claude takes a pass at what's left.</div>
               </div>
@@ -506,10 +513,15 @@
   </div>
 
   <!-- Inline edit category dropdown (shared) -->
-  <div id="category-popup" class="category-popup" style="display:none">
-    <select id="category-popup-select"></select>
-    <button class="btn btn-sm btn-primary" onclick="saveCategoryPopup()">Save</button>
-    <button class="btn btn-sm btn-secondary" onclick="closeCategoryPopup()">Cancel</button>
+  <div id="category-popup" class="category-popup" style="display:none" role="dialog" aria-label="Change category">
+    <div class="category-popup-row">
+      <select id="category-popup-select" aria-label="Category"></select>
+      <button class="btn btn-sm btn-primary" onclick="saveCategoryPopup()">Save</button>
+      <button class="btn btn-sm btn-secondary" onclick="closeCategoryPopup()">Cancel</button>
+    </div>
+    <label class="category-popup-all" id="category-popup-all" style="display:none">
+      <input type="checkbox" id="category-popup-all-check" checked /> <span id="category-popup-all-text"></span>
+    </label>
   </div>
 
   <!-- Merchant Chart Modal -->

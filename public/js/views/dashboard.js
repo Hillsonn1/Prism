@@ -276,7 +276,7 @@ function toggleTrendView() {
 
 function drillCategory(category) {
   clearFilterInputs();
-  state.jumpToCategory = category;
+  state.jumpToCategory = category === 'Uncategorized' ? '__uncategorized__' : category;
   state.jumpToMonth = state.dashboardMonth;
   state.groupByVendor = false;
   switchView('transactions');

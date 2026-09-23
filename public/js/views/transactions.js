@@ -9,7 +9,7 @@ function getFiltered() {
   return state.transactions.filter(t => {
     if (cat === '__uncategorized__' && t.category) return false;
     if (cat && cat !== '__uncategorized__' && (t.category || '') !== cat) return false;
-    if (search && !t.merchant.toLowerCase().includes(search) && !(t.notes || '').toLowerCase().includes(search)) return false;
+    if (search && ![t.merchant, t.notes, t.category, t.card, t.rawSource].some(v => (v || '').toLowerCase().includes(search))) return false;
     if (card && (t.card || '') !== card) return false;
     if (from && t.date < from) return false;
     if (to && t.date > to) return false;
@@ -264,14 +264,25 @@ document.getElementById('filter-merchant')?.addEventListener('input', debounce(r
 let popupTxnId = null;
 let popupMerchant = null;
 
-function _showPopup(e, selected) {
+function _showPopup(e, selected, merchant) {
   const popup = document.getElementById('category-popup');
   document.getElementById('category-popup-select').innerHTML = categoryOptions(selected, { blank: '-- Select category --' });
+  // Offer to carry the choice across the merchant's other purchases
+  const others = merchant ? state.transactions.filter(t => t.merchant === merchant).length - (popupTxnId ? 1 : 0) : 0;
+  const allRow = document.getElementById('category-popup-all');
+  allRow.style.display = others > 0 ? '' : 'none';
+  document.getElementById('category-popup-all-check').checked = true;
+  document.getElementById('category-popup-all-text').textContent = popupTxnId
+    ? `Also apply to ${plural(others, 'other purchase')} from ${merchant}`
+    : `Apply to all ${plural(others, 'purchase')} from ${merchant}`;
   const anchor = e.currentTarget || e.target.closest('.category-badge') || e.target;
   const rect = anchor.getBoundingClientRect();
   popup.style.display = 'flex';
   const width = popup.offsetWidth || 260;
-  popup.style.top = (rect.bottom + 6) + 'px';
+  const height = popup.offsetHeight || 80;
+  // Below the badge, or above it when the window ends first
+  const below = rect.bottom + 6;
+  popup.style.top = (below + height > window.innerHeight - 8 ? Math.max(8, rect.top - 6 - height) : below) + 'px';
   popup.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)) + 'px';
   popup.style.animation = 'none';
   void popup.offsetWidth;
@@ -281,16 +292,17 @@ function _showPopup(e, selected) {
 
 function openCategoryPopup(e, txnId) {
   e.stopPropagation();
+  const txn = state.transactions.find(t => t.id === txnId);
   popupTxnId = txnId;
   popupMerchant = null;
-  _showPopup(e, state.transactions.find(t => t.id === txnId)?.category || '');
+  _showPopup(e, txn?.category || '', txn?.merchant);
 }
 
 function openCategoryPopupForMerchant(e, merchant) {
   e.stopPropagation();
   popupTxnId = null;
   popupMerchant = merchant;
-  _showPopup(e, state.merchants[merchant] || state.transactions.find(t => t.merchant === merchant)?.category || '');
+  _showPopup(e, state.merchants[merchant] || state.transactions.find(t => t.merchant === merchant)?.category || '', merchant);
 }
 
 function closeCategoryPopup() {
@@ -306,31 +318,24 @@ async function saveCategoryPopup() {
     cat = await promptDialog({ title: 'Custom category', label: 'Category name', placeholder: 'e.g. Baby, Pets, Vacation' });
     if (!cat) return;
   }
+  const applyAll = document.getElementById('category-popup-all').style.display !== 'none' && document.getElementById('category-popup-all-check').checked;
+  const txn = popupTxnId ? state.transactions.find(t => t.id === popupTxnId) : null;
+  const merchant = popupMerchant || txn?.merchant;
+  closeCategoryPopup();
   try {
-    if (popupMerchant) {
-      const merchant = popupMerchant;
-      closeCategoryPopup();
-      await api('POST', '/api/merchants', { merchant, category: cat });
-      state.merchants = await api('GET', '/api/merchants');
-      let count = 0;
-      for (const t of state.transactions) if (t.merchant === merchant) { t.category = cat; count++; }
-      state.txVersion++;
-      renderTransactions();
-      showToast(`Category set for ${plural(count, 'transaction')}`, 'success');
-    } else {
-      const txn = state.transactions.find(t => t.id === popupTxnId);
-      await api('PUT', `/api/transactions/${popupTxnId}`, { category: cat });
-      if (txn) {
-        txn.category = cat;
-        state.txVersion++;
-        await api('POST', '/api/merchants', { merchant: txn.merchant, category: cat });
-      }
-      state.merchants = await api('GET', '/api/merchants');
-      closeCategoryPopup();
-      renderTransactions();
-      showToast('Category saved', 'success');
+    if (txn) await api('PUT', `/api/transactions/${txn.id}`, { category: cat });
+    // Remember the merchant; with applyAll every one of its rows follows
+    const r = await api('POST', '/api/merchants', { merchant, category: cat, applyToAll: applyAll || !txn });
+    if (txn) txn.category = cat;
+    for (const t of state.transactions) {
+      if (t.merchant === merchant && (applyAll || !txn || !t.category)) t.category = cat;
     }
+    state.merchants = await api('GET', '/api/merchants');
+    state.txVersion++;
     clearDashboardCaches();
+    renderTransactions();
+    const n = (txn ? 1 : 0) + (r.updated || 0);
+    showToast(n > 1 ? `Category set on ${plural(n, 'purchase')} from ${merchant}` : 'Category saved', 'success');
   } catch (err) {
     showToast('Could not save: ' + err.message, 'error');
   }
@@ -341,6 +346,8 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeModal(); closeCategoryPopup(); closeEditModal(); }
+  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
+  if (e.key === '/' && !typing && state.currentView === 'transactions') { e.preventDefault(); document.getElementById('filter-merchant')?.focus(); }
 });
 
 // ---- Add / edit modal ----

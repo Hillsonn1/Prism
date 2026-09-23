@@ -52,7 +52,7 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
     };
     for (const k of ['card', 'notes', 'originalAmount', 'originalCurrency', 'fxRate']) if (txn[k] === undefined || txn[k] === null || txn[k] === '') delete txn[k];
     store.update('transactions', list => { list.push(txn); });
-    if (txn.category) store.update('merchants', m => { m[txn.merchant] = txn.category; });
+    if (txn.category) { txn.categorySource = 'user'; store.update('merchants', m => { m[txn.merchant] = txn.category; }); }
     res.json(txn);
   }));
 
@@ -69,6 +69,7 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
         if (v === undefined || v === '' || v === null) delete txn[k]; else txn[k] = v;
       }
       if (fields.category === null) txn.category = null;
+      if ('category' in fields) { if (txn.category) txn.categorySource = 'user'; else delete txn.categorySource; }
       updated = txn;
     });
     res.json(updated);
@@ -147,13 +148,21 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
   // ---- Merchant memory ----
   router.get('/merchants', (_req, res) => res.json(store.read('merchants')));
 
+  // Remember a merchant's category. Fills in that merchant's uncategorized
+  // rows; with applyToAll, every row of the merchant follows.
   router.post('/merchants', route((req, res) => {
     const merchant = str(req.body.merchant, { field: 'merchant', max: 120, required: true });
     const category = str(req.body.category, { field: 'category', max: 60, required: true });
+    const applyToAll = Boolean(req.body.applyToAll);
     store.update('merchants', m => { m[merchant] = category; });
     let updated = 0;
     store.update('transactions', list => {
-      for (const t of list) if (t.merchant === merchant && !t.category) { t.category = category; updated++; }
+      for (const t of list) {
+        if (t.merchant !== merchant || (t.category && !applyToAll)) continue;
+        if (t.category !== category) updated++;
+        t.category = category;
+        t.categorySource = 'user';
+      }
     });
     res.json({ success: true, updated });
   }));
@@ -166,7 +175,7 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
     store.update('merchants', mem => { for (const { merchant, category } of mappings) mem[merchant] = category; });
     store.update('transactions', list => {
       const byMerchant = new Map(mappings.map(m => [m.merchant, m.category]));
-      for (const t of list) if (!t.category && byMerchant.has(t.merchant)) t.category = byMerchant.get(t.merchant);
+      for (const t of list) if (!t.category && byMerchant.has(t.merchant)) { t.category = byMerchant.get(t.merchant); t.categorySource = 'user'; }
     });
     res.json({ success: true });
   }));

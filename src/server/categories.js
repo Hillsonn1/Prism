@@ -22,7 +22,7 @@ const AUTO_RULES = [
   // Gas & Fuel
   [/\bshell\b|exxon|\bmobil\b|\bbp\b|chevron|speedway|circle\s*k|wawa|sheetz|sunoco|marathon\s*gas|valero|casey.s|quiktrip|\bqt\b|pilot\s*flying|flying\s*j|love.s\s*travel|racetrac|kwik\s*trip|kwik\s*star|murphy\s*usa|holiday\s*station|\bgas\s*station\b|\bfuel\b|\bpaz\b|\bdelek\b|\bsonol\b/i, 'Gas & Fuel'],
   // Subscriptions & Streaming — before Shopping so apple/google hits here first
-  [/netflix|spotify|hulu|disney\s*\+?|hbo\s*max|\bmax\b.*stream|apple\s*tv\+?|amazon\s*prime(?!\s*(now|fresh))|youtube\s*premium|peacock|paramount\+?|apple\.com\/bill|itunes|google\s*play|microsoft\s*store|nintendo\s*eshop|playstation\s*store|xbox\s*game|twitch|amc\+|shudder|criterion|curiosity\s*stream|discovery\+|espn\+|sling\s*tv|fubo|philo|starz|showtime\s*anytime|mubi|crunchyroll|sirius\s*xm|pandora\s*plus|tidal\b|audible|kindle\s*unlimited|scribd|duolingo\s*plus/i, 'Subscriptions & Streaming'],
+  [/netflix|spotify|hulu|disney\s*\+?|\badobe\b|elevenlabs|anthropic|\bclaude\b|openai|chatgpt|midjourney|\bcanva\b|grammarly|1password|nordvpn|expressvpn|icloud|google\s*one|microsoft\s*365|office\s*365|hbo\s*max|\bmax\b.*stream|apple\s*tv\+?|amazon\s*prime(?!\s*(now|fresh))|youtube\s*premium|peacock|paramount\+?|apple\.com\/bill|itunes|google\s*play|microsoft\s*store|nintendo\s*eshop|playstation\s*store|xbox\s*game|twitch|amc\+|shudder|criterion|curiosity\s*stream|discovery\+|espn\+|sling\s*tv|fubo|philo|starz|showtime\s*anytime|mubi|crunchyroll|sirius\s*xm|pandora\s*plus|tidal\b|audible|kindle\s*unlimited|scribd|duolingo\s*plus/i, 'Subscriptions & Streaming'],
   // Entertainment — before Shopping so Steam/tickets don't fall through
   [/\bamc\s*theatre|\bamc\s*cinema|regal\s*cine|cinemark|fandango|alamo\s*draft|harkins\b|landmark\s*theatre|cinepolis|ticketmaster|stubhub|eventbrite|\baxs\b\s*ticket|dave\s*&?\s*busters?|round\s*one\b|bowlero|main\s*event\b|topgolf|lucky\s*strike\s*ent|pinstripes|escapology|escape\s*room|androids?\s*pinball|museum\b|aquarium\b|zoo\b|theme\s*park|six\s*flags|cedar\s*fair|knotts\b|universal\s*studio|disney\s*park|steam\s*games|epicgames|humble\s*bundle|itch\.io/i, 'Entertainment'],
   // Shopping — without home depot/lowes (they belong in Home & Garden)
@@ -47,16 +47,16 @@ const AUTO_RULES = [
 
 // Israeli chains and services, as they appear transliterated on statements
 const ISRAEL_RULES = [
-  [/shufersal|shufersall|rami\s*lev[iy]|yochananof|yohananof|osher\s*ad|hatzi\s*hinam|hazi\s*hinam|ma[ch]+sanei\s*hashuk|yeinot\s*bitan|\bbitan\b|tiv\s*taam|\bmega\s*(ba|bair|kol)?\b|carrefour|super\s*yuda|freshmarket|zol\s*be?gadol|mahane\s*yehuda|king\s*store|kingstore|super\s*sal\b|\bam\s*:?\s*pm\b|\bampm\b|\bshuk\b|hamakolet|makolet|super\s*dosh|kosher\s*(market|mart)|\bglatt\b/i, 'Groceries'],
-  [/\baroma\b|\bcofix\b|landwer|cafe\s*cafe|\bgreg\b|arcaffe|caffit|roladin|\bgolda\b|vaniglia|burgerim|burger\s*saloon|\bmoses\b|\bbbb\b|japanika|\bgiraffe\b|\bwolt\b|\b10\s*bis\b|ten\s*bis|tenbis|\bcibus\b|shipudei|shipudim|hummus|humus|falafel|shawarma|shwarma|sabich|hamitbach|meshek|piece\s*of\s*cake|angel\s*bakery|nechama|biscotti|max\s*brenner|coffee\s*bean|cafe\s*joe|joe\s*cafe|leggenda|\banita\b|gelato|glida|pizza\s*hut|dominos|mcdonald|\bkfc\b|burger\s*king|pinati|pundak|steakiya|misada|mis'ada|bistro|\bbar\s*giyora|\bport\s*said\b|susu|taizu|yaffo|abu\s*hassan|ima\b.*rest/i, 'Dining & Restaurants'],
+  [/shufersal|shufersall|rami\s*lev[iy]|yochananof|yohananof|osher\s*ad|hatzi\s*hinam|hazi\s*hinam|ma[ch]+sanei\s*hashuk|yeinot\s*bitan|\bbitan\b|tiv\s*taam|\bmega\s*(ba|bair|kol)?\b|carrefour|super\s*yuda|freshmarket|zol\s*be?gadol|mahane\s*yehuda|king\s*store|kingstore|super\s*sal\b|\bam\s*:?\s*pm\b|\bampm\b|hamakolet|makolet|super\s*dosh|kosher\s*(market|mart)|\bglatt\b|mayan\s*2000|ma[ch]+san[iy]+\s*ha?sh[au]+k|ma'?adan|\bkolbo\b|supersal/i, 'Groceries'],
+  [/\baroma\b|\bcofix\b|landwer|cafe\s*cafe|\bgreg\b|arcaffe|caffit|roladin|\bgolda\b|vaniglia|burgerim|burger\s*saloon|\bmoses\b|\bbbb\b|japanika|\bgiraffe\b|\bwolt\b|\b10\s*bis\b|ten\s*bis|tenbis|\bcibus\b|shipudei|shipudim|hummus|humus|falafel|shawarma|shwarma|sabich|hamitbach|meshek|piece\s*of\s*cake|angel\s*bakery|nechama|biscotti|max\s*brenner|coffee\s*bean|cafe\s*joe|joe\s*cafe|leggenda|\banita\b|gelato|glida|pizza\s*hut|dominos|mcdonald|\bkfc\b|burger\s*king|pinati|pundak|steakiya|misada|mis'ada|bistro|\bbar\s*giyora|\bport\s*said\b|susu|taizu|yaffo|abu\s*hassan|ima\b.*rest|shakshuk|shkshok|sabi[ch]+\b|\bpita\b|pizuh|maafi|maafiya/i, 'Dining & Restaurants'],
   [/\bpaz\b|\bdelek\b|\bsonol\b|dor\s*alon|\balon\s*(gas|fuel|station)|\bten\s*(gas|fuel|station)|\byellow\b|\bmenta\b|so\s*good\b|dalkan|pazomat|tzomet\s*(gas|delek)/i, 'Gas & Fuel'],
-  [/\begged\b|\bdan\s*(bus|north|south|transport)|\bkavim\b|metropoline|nateev|superbus|rav\s*kav|ravkav|rakevet|israel\s*rail|\brail\b|\bgett\b|\byango\b|moovit|bubble\s*dan|tel-?o-?fun|carmelit|light\s*rail|\bpango\b|cellopark|ahuzot\s*ha?hof|ahuzot|\bel\s*al\b|\belal\b|israir|\barkia\b|ben\s*gurion|natbag|kavei|taxi|monit|\bbus\b|\bparking\b|\bhanaya\b|\bhania\b/i, 'Travel & Transport'],
+  [/\begged\b|\bdan\s*(bus|north|south|transport)|\bkavim\b|metropoline|nateev|superbus|rav[\s-]*kav|ravkav|getyourguide|\bviator\b|\bklook\b|rakevet|israel\s*rail|\brail\b|\bgett\b|\byango\b|moovit|\bbolt\b|\bgrab\b|grabtaxi|bubble\s*dan|tel-?o-?fun|carmelit|light\s*rail|\bpango\b|cellopark|ahuzot\s*ha?hof|ahuzot|\bel\s*al\b|\belal\b|israir|\barkia\b|ben\s*gurion|natbag|kavei|taxi|monit|\bbus\b|\bparking\b|\bhanaya\b|\bhania\b/i, 'Travel & Transport'],
   [/super-?\s*pharm|superpharm|be\s*pharm|good\s*pharm|new-?\s*pharm|meuhedet|mecuhedet|meuhdet|maccabi|macabi|clalit|leumit|assuta|hadassah|ichilov|\bsheba\b|tel\s*hashomer|shaare\s*zedek|shaarei\s*tzedek|\bterem\b|bikur\s*(rofe|holim)|kupat\s*holim|\bpharm\b|optics?|optica|opticana|halperin|carolina\s*lemke|\bdr\.?\s|rofe|shinayim|dental|\bmirpaa|mirpa'a|physio|fizio|beit\s*merkahat|merkahat/i, 'Health & Medical'],
-  [/\bbezeq\b|\bpartner\b|cellcom|pelephone|\bhot\b|hot\s*mobile|\byes\b|golan\s*telecom|\bgolan\b|\b01[2-9]\b|rami\s*levy\s*(com|tik)|hevrat\s*ha?shmal|\biec\b|israel\s*electric|electric\s*corp|mekorot|mei\s*(avivim|carmel|shikma|raanana|netanya|ashkelon)|\bmei\b|water\s*corp|hagihon|gihon|arnona|iriya|iriyat|municipal|vaad\s*ba?yit|va'ad|supergas|amisragas|pazgas|bituach|\bharel\b|\bmigdal\b|\bclal\b|phoenix|menora|ayalon\s*(ins|bit)|shirbit|\blibra\b|\bwobi\b|9\s*million|insurance/i, 'Utilities & Bills'],
-  [/\bcastro\b|\bfox\b|\bgolf\b|renuar|h\s*&\s*m|\bzara\b|terminal\s*x|\badika\b|\bshein\b|\bnext\b|american\s*eagle|\bivory\b|\bksp\b|\bbug\b|ma[ch]+sanei\s*hashmal|electric\s*shop|hamashbir|mashbir|azrieli|dizengoff\s*center|big\s*fashion|\bbig\b|grand\s*canyon|ramat\s*aviv\s*mall|kenyon|kanyon|canyon|toys\s*r\s*us|\bace\b|home\s*center|max\s*stock|maxstock|shilav|super\s*baby|steimatzky|t[sz]omet\s*sfarim|\bikea\b|nespresso|weshoes|\bscoop\b|\baldo\b|nine\s*west|\bjump\b|\btimberland\b|\bcolumbia\b|\bnike\b|\badidas\b|decathlon|\blord\s*kitsch|kitsch|honigman|twentyfourseven|24\/7|\bhoodies\b|\bpull\s*&\s*bear|bershka|mango\b|\bgap\b|office\s*depot|\bstematsky/i, 'Shopping'],
+  [/\bbezeq\b|\bpartner\b|cellcom|pelephone|tripletel|we4g|\bhot\b|hot\s*mobile|\byes\b|golan\s*telecom|\bgolan\b|\b01[2-9]\b|rami\s*levy\s*(com|tik)|hevrat\s*ha?shmal|\biec\b|israel\s*electric|electric\s*corp|mekorot|mei\s*(avivim|carmel|shikma|raanana|netanya|ashkelon)|\bmei\b|water\s*corp|hagihon|gihon|arnona|iriya|iriyat|municipal|vaad\s*ba?yit|va'ad|supergas|amisragas|pazgas|bituach|\bharel\b|\bmigdal\b|\bclal\b|phoenix|menora|ayalon\s*(ins|bit)|shirbit|\blibra\b|\bwobi\b|9\s*million|insurance/i, 'Utilities & Bills'],
+  [/\bcastro\b|\bfox\b|\bgolf\b|renuar|h\s*&\s*m|\bzara\b|terminal\s*x|\badika\b|\bshein\b|\bnext\b|american\s*eagle|\bivory\b|\bksp\b|\bbug\b|ma[ch]+sanei\s*hashmal|electric\s*shop|hamashbir|mashbir|azrieli|dizengoff\s*center|big\s*fashion|\bbig\b|grand\s*canyon|ramat\s*aviv\s*mall|kenyon|kanyon|canyon|toys\s*r\s*us|\bace\b|home\s*center|max\s*stock|maxstock|shilav|super\s*baby|st[ei]+matzk[iy]|king\s*power|duty\s*free|superpram|t[sz]omet\s*sfarim|\bikea\b|nespresso|weshoes|\bscoop\b|\baldo\b|nine\s*west|\bjump\b|\btimberland\b|\bcolumbia\b|\bnike\b|\badidas\b|decathlon|\blord\s*kitsch|kitsch|honigman|twentyfourseven|24\/7|\bhoodies\b|\bpull\s*&\s*bear|bershka|mango\b|\bgap\b|office\s*depot|\bstematsky/i, 'Shopping'],
   [/laline|\bsabon\b|kiehl|mac\s*cosmetics|mispara|barber|salon|pedicure|manicure|\blash\b|\bbrow\b|hair\s*(salon|studio)|cosmetic|kosmetik|\bspa\b/i, 'Personal Care'],
   [/\bmahon\b|yeshiva|yeshivat|\bkollel\b|beit\s*sefer|\bschool\b|universit|technion|bar\s*ilan|\bhebrew\s*u|weizmann|ben\s*gurion\s*u|ariel\s*u|open\s*u|college|michlala|michlelet|\bulpan\b|\b[ch]ugim\b|\bhug\b|tutor|matnas|community\s*center|\bgan\s*(yeladim|hova|trom)|\bmaon\b|\bpeuton|tzaharon|tsaharon/i, 'Education'],
-  [/tzedak|zedaka|\bgemach\b|charity|\bamuta|\bamutat|yad\s*sarah|yad\s*eliezer|ezer\s*mizion|\blatet\b|\bleket\b|paamonim|\bchabad\b|kupat\s*ha'?ir|vaad\s*harabanim|hachnasat\s*kal|donation|\bmatan\b|\bjnf\b|keren\s*kayemet|magen\s*david|\bmda\b|zaka|united\s*hatzalah|hatzalah|hatzolah|meir\s*panim|colel\s*chabad|\bshul\b|synagogue|beit\s*knesset|\bkehila|kehilat/i, 'Gifts & Donations'],
+  [/tzedak|zedaka|\bgemach\b|charity|\bamuta|\bamutat|yad\s*sarah|yad\s*eliezer|ezer\s*mizion|\blatet\b|\bleket\b|paamonim|chabad\s*(house|of|lubavitch)|beit\s*chabad|colel\s*chabad|kupat\s*ha'?ir|vaad\s*harabanim|hachnasat\s*kal|donation|\bmatan\b|\bjnf\b|keren\s*kayemet|magen\s*david|\bmda\b|zaka|united\s*hatzalah|hatzalah|hatzolah|meir\s*panim|colel\s*chabad|\bshul\b|synagogue|beit\s*knesset|\bkehila|kehilat/i, 'Gifts & Donations'],
   [/cinema\s*city|yes\s*planet|hot\s*cinema|rav\s*hen|lev\s*cinema|\bglobus\b|cinemall|luna\s*park|superland|jump\s*park|escape\s*room|\bzappa\b|\bbarby\b|hangar\s*11|caesarea\s*amph|eventim|\bleaan\b|\bbravo\b|habima|cameri|beit\s*lessin|tzavta|israel\s*museum|tower\s*of\s*david|\bsafari\b|biblical\s*zoo|\bzoo\b|hamat\s*gader|yamit\s*2000|meymadion|kids\s*club|\bpark\s*(ha|hamaim|hayarkon)|tickets?\b|\bmuseum|\bteatron|theatre|theater|\bkolnoa/i, 'Entertainment'],
 ];
 
@@ -65,7 +65,7 @@ const ISRAEL_RULES = [
 // Shopping, not Groceries.
 const GENERIC_RULES = [
   [/\b(pizza|pizzeria|cafe|caf[eé]|coffee|espresso|bakery|bagels?|deli|restaurant|ristorante|bistro|grill|grille|kitchen|diner|eatery|tavern|pub|brewing|brewery|taproom|sushi|ramen|noodle|taco|tacos|taqueria|burger|burgers|wings|steakhouse|bbq|barbecue|chicken|kebab|falafel|shawarma|shwarma|hummus|creamery|donuts?|doughnuts?|smoothie|juice|boba|tea\s*house|teahouse|catering|caterers|food\s*truck|cantina|trattoria|osteria|brasserie|gastropub|cookies|cupcakes?|frozen\s*yogurt|froyo|gelato|ice\s*cream)\b/i, 'Dining & Restaurants'],
-  [/\b(grocery|grocer|groceries|supermarket|super\s*market|market|markets|foods|farms?|produce|butcher|kosher|glatt|fish\s*market|seafood\s*market|organic|natural\s*foods|co-?op|bodega|convenience|mini\s*mart|minimart|food\s*mart|quick\s*stop|liquor|liquors|wine\s*(&|and)\s*spirits|wines?\s*shop|beverage)\b/i, 'Groceries'],
+  [/\b(grocery|grocer|groceries|supermarket|super\s*market|market|markets|foods|farms?|produce|butcher|fish\s*market|seafood\s*market|organic|natural\s*foods|co-?op|bodega|convenience|mini\s*mart|minimart|food\s*mart|quick\s*stop|liquor|liquors|wine\s*(&|and)\s*spirits|wines?\s*shop|beverage)\b/i, 'Groceries'],
   [/\b(gas|fuel|petrol|petroleum|gasoline|service\s*station|filling\s*station|ev\s*charg\w*|supercharger|chargepoint|electrify\s*america|evgo|blink\s*charg)\b/i, 'Gas & Fuel'],
   [/\b(pharmacy|pharma|drug\s*store|drugstore|apothecary|clinic|clinics|dental|dentist|dentistry|orthodont\w*|medical|physician|physicians|hospital|urgent\s*care|pediatric\w*|dermatolog\w*|optometr\w*|ophthalmolog\w*|optical|eyecare|eye\s*care|vision|lab|labs|laborator\w*|imaging|radiology|physical\s*therapy|physio\w*|chiropract\w*|acupunctur\w*|psycholog\w*|therapist|therapy|counseling|wellness|health|healthcare|fitness|gym|crossfit|pilates|yoga|barre|athletic\s*club|vet|veterinar\w*|animal\s*hospital)\b/i, 'Health & Medical'],
   [/\b(parking|garage|park\s*(n|and|&)\s*(ride|fly)|toll|tolls|tollway|turnpike|transit|metro|subway\s*(card|fare)|railroad|railway|rail|amtrak|bus|coach|shuttle|taxi|cab|limo|limousine|rideshare|airline|airlines|airways|airport|flight|flights|hotel|hotels|inn|motel|resort|lodge|hostel|suites|car\s*rental|rent-?a-?car|rental\s*car|cruise|cruises|travel|tours?|vacation|ferry)\b/i, 'Travel & Transport'],
@@ -200,6 +200,9 @@ const PLAID_CATEGORY_MAP = {
   PERSONAL_CARE_GYMS_AND_FITNESS_CENTERS: 'Health & Medical',
   GENERAL_SERVICES_AUTOMOTIVE: 'Gas & Fuel',
   GENERAL_SERVICES_EDUCATION: 'Education',
+  GENERAL_SERVICES_CHILDCARE: 'Education',
+  GENERAL_SERVICES_POSTAGE_AND_SHIPPING: 'Shopping',
+  MEDICAL_VETERINARY_SERVICES: 'Health & Medical',
   GENERAL_SERVICES_INSURANCE: 'Utilities & Bills',
   GOVERNMENT_AND_NON_PROFIT_DONATIONS: 'Gifts & Donations',
   TRANSPORTATION: 'Travel & Transport',
@@ -213,9 +216,21 @@ const PLAID_CATEGORY_MAP = {
   BANK_FEES: 'Other',
 };
 
+// Plaid's primary categories, longest first so "GENERAL_MERCHANDISE_..." isn't read as "GENERAL"
+const PLAID_PRIMARIES = ['GOVERNMENT_AND_NON_PROFIT', 'GENERAL_MERCHANDISE', 'RENT_AND_UTILITIES', 'HOME_IMPROVEMENT', 'GENERAL_SERVICES',
+  'FOOD_AND_DRINK', 'LOAN_PAYMENTS', 'TRANSPORTATION', 'ENTERTAINMENT', 'PERSONAL_CARE', 'TRANSFER_OUT', 'TRANSFER_IN', 'BANK_FEES',
+  'MEDICAL', 'TRAVEL', 'INCOME', 'OTHER'];
+function plaidPrimary(detailed) {
+  const d = String(detailed || '');
+  return PLAID_PRIMARIES.find(p => d === p || d.startsWith(p + '_')) || '';
+}
+
+// Accepts Plaid's { primary, detailed } object or just the detailed code
 function mapPlaidCategory(pfc) {
   if (!pfc) return null;
-  return PLAID_CATEGORY_MAP[pfc.detailed] || PLAID_CATEGORY_MAP[pfc.primary] || null;
+  const detailed = typeof pfc === 'string' ? pfc : pfc.detailed;
+  const primary = typeof pfc === 'string' ? plaidPrimary(pfc) : (pfc.primary || plaidPrimary(detailed));
+  return PLAID_CATEGORY_MAP[detailed] || PLAID_CATEGORY_MAP[primary] || null;
 }
 
 
@@ -233,10 +248,20 @@ function isPayment(name) {
   return PAYMENT_RE.test(clean) || PLAID_PAYMENT_RE.test(clean);
 }
 
+// Money the card issuer put back that isn't a merchant refund: rewards,
+// statement credits, interest adjustments. Only ever applies to credits.
+const CARD_CREDIT_RE = /\b(credit|reward|rewards|cash\s*back|cashback|statement|adjustment|adj|interest|rebate|bonus|promo|courtesy|redemption|paze)\b/i;
+function isCardCredit(name, amount, plaidCategory = '') {
+  if (!(amount < 0)) return false;
+  const primary = plaidPrimary(plaidCategory);
+  if (['LOAN_PAYMENTS', 'TRANSFER_IN', 'TRANSFER_OUT', 'BANK_FEES', 'INCOME'].includes(primary)) return true;
+  return CARD_CREDIT_RE.test(String(name || ''));
+}
+
 module.exports = {
   CATEGORIES, HIGH_CONFIDENCE, LOW_CONFIDENCE,
   AUTO_RULES, ISRAEL_RULES, GENERIC_RULES, DESCRIPTION_RULES,
   autoCategory, genericCategory, findSimilarMerchant, categoryFromDescription, simpleKey,
-  mapBankCategory, mapPlaidCategory,
-  PAYMENT_RE, PLAID_PAYMENT_RE, isPayment,
+  mapBankCategory, mapPlaidCategory, plaidPrimary,
+  PAYMENT_RE, PLAID_PAYMENT_RE, isPayment, isCardCredit,
 };

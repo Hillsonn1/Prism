@@ -60,10 +60,14 @@ function amountHtml(t, opts = {}) {
   return html`<span class="${cls}">${fmt(t.amount)}</span>${orig ? html` <span class="amount-orig" title="Charged in shekels">${orig}</span>` : ''}`;
 }
 
-function fmtDate(dateStr) {
+// "Sep 22", with the year only when it isn't this year
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtDate(dateStr, { year = 'auto' } = {}) {
   if (!dateStr) return '';
   const [y, m, d] = dateStr.split('-');
-  return `${m}/${d}/${y}`;
+  const label = `${MONTHS_SHORT[+m - 1] || m} ${+d}`;
+  const showYear = year === 'always' || (year === 'auto' && y !== String(new Date().getFullYear()));
+  return showYear ? `${label}, ${y}` : label;
 }
 
 function fmtMonth(m, style = 'long') {

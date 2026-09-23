@@ -6,6 +6,16 @@
 // Known abbreviations that regex title-casing can't fix
 const MERCHANT_ABBR = new Map([
   ['wsj', 'Wall Street Journal'],
+  ['mayan 2000', 'Mayan 2000'],
+  ['rav kav', 'Rav-Kav'],
+  ['ravkav', 'Rav-Kav'],
+  ['grab dom', 'Grab'],
+  ['grabtaxi', 'Grab'],
+  ['grab*', 'Grab'],
+  ['kupat holim mecuhedet', 'Meuhedet'],
+  ['kupat holim meuhedet', 'Meuhedet'],
+  ['getyourguideoperations', 'GetYourGuide'],
+  ['getyourguide', 'GetYourGuide'],
   ['wholefds', 'Whole Foods'],
   ['wholefood', 'Whole Foods'],
   ['amzn mktp', 'Amazon'],
@@ -82,6 +92,9 @@ const BRAND_CASING = new Map([
   ['amc', 'AMC'], ['bp', 'BP'], ['mta', 'MTA'], ['nyc', 'NYC'], ['dmv', 'DMV'], ['tj maxx', 'TJ Maxx'],
   ['gnc', 'GNC'], ['dsw', 'DSW'], ['rei', 'REI'], ['ulta', 'Ulta'], ['lululemon', 'Lululemon'],
   ['el al', 'El Al'], ['10bis', '10bis'], ['ten bis', '10bis'], ['wolt', 'Wolt'], ['gett', 'Gett'],
+  ['getyourguide', 'GetYourGuide'], ['getyourguideoperations', 'GetYourGuide'], ['getyourguide operations', 'GetYourGuide'],
+  ['rav kav online', 'Rav-Kav'], ['rav kav', 'Rav-Kav'], ['ravkav', 'Rav-Kav'], ['grab dom', 'Grab'], ['grabtaxi', 'Grab'],
+  ['mayan 2000', 'Mayan 2000'], ['supersal', 'Supersal'], ['kupat holim mecuhedet', 'Meuhedet'], ['kupat holim meuhedet', 'Meuhedet'],
   ['ksp', 'KSP'], ['am pm', 'AM:PM'], ['am:pm', 'AM:PM'], ['ampm', 'AM:PM'], ['hot', 'HOT'], ['yes', 'yes'],
 ]);
 
@@ -272,6 +285,13 @@ function stripTrailingLocation(s) {
 
 function quickNormalizeName(merchant) {
   let s = merchant.trim();
+
+  // Masked digits from the bank ("***.****.****** BOLT", "KGP ******") and
+  // a parenthetical the bank cut off ("THE KOSHER PLACE (THAILAN")
+  s = s.replace(/[*#]{2,}[*#.\-_/]*/g, ' ').replace(/(^|\s)[.\-_/]+(?=\s|$)/g, ' ').replace(/\s*\([^)]*$/, '').trim();
+  // Leading store / reference numbers ("0491 STARBUCKS")
+  s = s.replace(/^\d{3,}\s+(?=[A-Za-z])/, '');
+  if (!s) return 'Unknown merchant';
 
   // Payment processor / wallet prefixes (order matters — longer first)
   s = s.replace(/^APLPAY\s+/i, '');

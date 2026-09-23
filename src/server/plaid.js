@@ -7,7 +7,7 @@
 
 const crypto = require('crypto');
 const express = require('express');
-const { isPayment, mapPlaidCategory, LOW_CONFIDENCE } = require('./categories');
+const { isPayment, isCardCredit, mapPlaidCategory, LOW_CONFIDENCE } = require('./categories');
 const { localCategory, dedupKeys, aiPass } = require('./importer');
 
 const HOSTS = { sandbox: 'https://sandbox.plaid.com', production: 'https://production.plaid.com' };
@@ -41,7 +41,21 @@ function isSpend(p, account) {
   // Name checks only for money coming in: a payment never posts as a charge,
   // and this keeps merchants like "Payment Processing Inc" out of the net
   if (p.amount >= 0) return true;
-  return ![p.name, p.merchant_name].filter(Boolean).some(isPayment);
+  if ([p.name, p.merchant_name].filter(Boolean).some(isPayment)) return false;
+  return !isCardCredit(p.name, p.amount, detailed || primary);
+}
+
+// Plaid's cleaned-up merchant name, unless it looks like a mismatch (it once
+// turned "RAV KAV ONLINE" into a clothing brand): keep it only when it shares
+// a word with the bank's own descriptor.
+function merchantLabel(p) {
+  const rawName = p.name || '';
+  const enriched = p.merchant_name || '';
+  if (!enriched) return rawName || 'Unknown';
+  if (!rawName) return enriched;
+  const words = enriched.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length >= 3);
+  const rawKey = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return words.some(w => rawKey.includes(w)) ? enriched : rawName;
 }
 
 // Purchase date rather than posting date, so a charge keeps its date when it settles
@@ -120,7 +134,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
 
       const amount = txnAmount(p);
       const date = txnDate(p);
-      const raw = p.merchant_name || p.name || 'Unknown';
+      const raw = merchantLabel(p);
       // No user in the loop during a background sync: apply any plausible guess
       const guess = localCategory(raw, merchants, mapPlaidCategory(p.personal_finance_category));
       const name = guess.name;
@@ -143,6 +157,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
         rawSource: p.name || raw,
         amount,
         category,
+        ...(category ? { categorySource: 'auto' } : {}),
         card: account.card || undefined,
         source: account.source,
         importedAt: new Date().toISOString(),
@@ -560,4 +575,4 @@ function createPlaid({ store, openExternal = null, log = console, request = http
   return { router, syncItems, startScheduler, stop, state, renameCard, renameSource };
 }
 
-module.exports = { createPlaid, getConfig, isSpend, txnDate, txnAmount, SYNC_INTERVAL_MS };
+module.exports = { createPlaid, getConfig, isSpend, merchantLabel, txnDate, txnAmount, SYNC_INTERVAL_MS };

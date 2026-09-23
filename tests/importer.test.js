@@ -47,7 +47,7 @@ test('categorizeUncategorized applies memory and rules without AI', async () => 
     assert.equal(r.autoUpdated, 2);
     assert.deepEqual(r.unknownMerchants, []);
     // "Shop" is a generic hint, so it becomes a suggestion to confirm rather than a fact
-    assert.deepEqual(r.suggestions, [{ merchant: 'Weird Shop', category: 'Shopping', confidence: 0.7 }]);
+    assert.deepEqual(r.suggestions, [{ merchant: 'Weird Shop', category: 'Shopping', confidence: 0.8 }]);
     const cats = Object.fromEntries(store.read('transactions').map(t => [t.merchant, t.category]));
     assert.deepEqual(cats, { Netflix: 'Subscriptions & Streaming', 'Weird Shop': null, Known: 'Other' });
   } finally { cleanup(); }

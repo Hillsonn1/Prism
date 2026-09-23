@@ -40,10 +40,11 @@ function localCategory(rawMerchant, merchants, hint) {
 
   const brand = autoCategory(rawMerchant) || autoCategory(name);
   if (brand) return { name, category: brand, confidence: 0.9, learned: true };
-  if (hint) return { name, category: hint, confidence: 0.85, learned: true };
-
+  // A business word in the name ("restaurant", "taxi") beats the bank's guess,
+  // which is often a generic bucket or plain wrong for merchants abroad
   const generic = genericCategory(rawMerchant) || genericCategory(name);
-  if (generic) return { name, category: generic, confidence: 0.7, learned: true };
+  if (generic) return { name, category: generic, confidence: hint === generic ? 0.9 : 0.8, learned: true };
+  if (hint) return { name, category: hint, confidence: 0.85, learned: true };
   return { name, category: null, confidence: 0, learned: false };
 }
 
@@ -75,7 +76,7 @@ async function aiPass(unknown, rows, merchants, apiKey, onProgress) {
       if (r.confidence >= HIGH_CONFIDENCE) {
         merchants[cleanName] = r.category;
         for (const t of rows) {
-          if (t._raw === r.merchant && !t.category) { t.merchant = cleanName; t.category = r.category; }
+          if (t._raw === r.merchant && !t.category) { t.merchant = cleanName; t.category = r.category; t.categorySource = 'auto'; }
         }
         stillUnknown.delete(r.merchant);
       } else if (r.confidence >= LOW_CONFIDENCE) {
@@ -128,6 +129,7 @@ async function importRows(store, rows, meta, { apiKey = null, onProgress } = {})
       amount: r.amount,
       ...(r.originalCurrency ? { originalAmount: r.originalAmount, originalCurrency: r.originalCurrency, fxRate: r.fxRate } : {}),
       category,
+      ...(category ? { categorySource: 'auto' } : {}),
       card: meta.card || undefined,
       source: meta.source,
       importedAt: new Date().toISOString(),
@@ -177,7 +179,7 @@ async function categorizeUncategorized(store, { apiKey = null, onProgress } = {}
     const guess = localCategory(merchant, merchants, null);
     if (guess.category && guess.confidence >= HIGH_CONFIDENCE) {
       merchants[merchant] = guess.category;
-      for (const t of list) { t.category = guess.category; autoUpdated++; }
+      for (const t of list) { t.category = guess.category; t.categorySource = 'auto'; autoUpdated++; }
     } else if (guess.category) {
       guesses.set(merchant, { category: guess.category, confidence: guess.confidence });
     } else {
@@ -202,4 +204,51 @@ async function categorizeUncategorized(store, { apiKey = null, onProgress } = {}
   return { autoUpdated, suggestions, unknownMerchants };
 }
 
-module.exports = { importRows, categorizeUncategorized, localCategory, dedupKeys, aiPass, mapPlaidCategory };
+
+// Re-runs the local rules over every automatically categorized row. Rows and
+// merchants the user set by hand are left alone; a confident, different answer
+// from the (possibly improved) rules replaces the old guess.
+function recheckCategories(store) {
+  const transactions = store.read('transactions');
+  const merchants = store.read('merchants');
+  const userSet = new Set(transactions.filter(t => t.categorySource === 'user').map(t => t.merchant));
+  let changed = 0;
+  const changes = {};
+  for (const t of transactions) {
+    if (t.categorySource === 'user' || userSet.has(t.merchant)) continue;
+    const hint = mapPlaidCategory(t.plaidCategory);
+    const guess = localCategory(t.rawSource || t.merchant, {}, hint);
+    const rulesOnly = guess.category && guess.confidence >= HIGH_CONFIDENCE ? guess.category : null;
+    if (rulesOnly && rulesOnly !== t.category) {
+      changes[t.merchant] = changes[t.merchant] || { from: t.category, to: rulesOnly, count: 0 };
+      changes[t.merchant].count++;
+      t.category = rulesOnly;
+      t.categorySource = 'auto';
+      merchants[t.merchant] = rulesOnly;
+      changed++;
+    }
+  }
+  store.write('transactions', transactions);
+  store.write('merchants', merchants);
+  return { changed, changes };
+}
+
+// First run on data from before provenance was recorded: a row whose category
+// isn't what the rules would have given it can only have been set by hand.
+function inferCategorySources(store) {
+  const settings = store.read('settings');
+  if (settings.categorySourceMigrated) return;
+  store.update('transactions', list => {
+    for (const t of list) {
+      if (!t.category || t.categorySource) continue;
+      if (t.manual) { t.categorySource = 'user'; continue; }
+      const raw = t.rawSource || t.merchant;
+      const hint = mapPlaidCategory(t.plaidCategory);
+      const signals = [hint, autoCategory(raw), autoCategory(t.merchant), genericCategory(raw), genericCategory(t.merchant), mapBankCategory(t.csvCategory)];
+      t.categorySource = signals.includes(t.category) ? 'auto' : 'user';
+    }
+  });
+  store.update('settings', s => { s.categorySourceMigrated = true; });
+}
+
+module.exports = { importRows, categorizeUncategorized, recheckCategories, inferCategorySources, localCategory, dedupKeys, aiPass, mapPlaidCategory };

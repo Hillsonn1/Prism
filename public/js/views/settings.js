@@ -248,3 +248,18 @@ async function renderAbout() {
       ${a.canOpen ? html`<button class="btn btn-secondary btn-sm" style="margin-top:.75rem" onclick="api('POST','/api/about/open-data-folder')">Open data folder</button>` : ''}`;
   } catch { el.textContent = ''; }
 }
+
+async function recheckCategories() {
+  await withButton('recheck-btn', 'Checking…', async () => {
+    try {
+      const { changed, changes } = await api('POST', '/api/cleanup/recheck');
+      clearAllCaches();
+      await loadAll();
+      if (!changed) { showToast('All automatic categories already match the rules', 'success'); return; }
+      const lines = Object.entries(changes).slice(0, 6).map(([m, c]) => `${m}: ${c.from || 'none'} → ${c.to}`);
+      showToast(`${plural(changed, 'purchase')} re-categorized`, 'success');
+      await confirmDialog({ title: `${plural(changed, 'purchase')} re-categorized`, message: lines.join(' · ') + (Object.keys(changes).length > 6 ? ' · …' : ''), okText: 'OK', cancelText: 'Close' });
+      rerenderCurrentView();
+    } catch (err) { showToast('Failed: ' + err.message, 'error'); }
+  });
+}
