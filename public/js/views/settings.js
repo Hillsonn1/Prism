@@ -1,6 +1,17 @@
 // Settings view: AI key, currency, appearance, cards, location, clean-up tools.
 
+const SETTINGS_TABS = ['general', 'bank', 'ai', 'categories', 'cleanup', 'about'];
+function showSettingsTab(tab) {
+  if (!SETTINGS_TABS.includes(tab)) tab = 'general';
+  state.settingsTab = tab;
+  document.querySelectorAll('#view-settings [data-tab]').forEach(el => {
+    if (el.tagName === 'BUTTON') el.classList.toggle('seg-active', el.dataset.tab === tab);
+    else el.style.display = el.dataset.tab === tab ? '' : 'none';
+  });
+}
+
 async function renderSettings() {
+  showSettingsTab(state.settingsTab || 'general');
   renderPlaidSettings();
   let data;
   try { data = await api('GET', '/api/settings'); } catch { return; }

@@ -205,7 +205,10 @@ async function pollPlaidChanges() {
     if (state.plaidChangeCounter === undefined) { state.plaidChangeCounter = s.changeCounter; return; }
     if (s.changeCounter === state.plaidChangeCounter) return;
     state.plaidChangeCounter = s.changeCounter;
+    const before = new Set(state.transactions.map(t => t.id));
     await loadAll();
+    state.freshIds = new Set(state.transactions.filter(t => !before.has(t.id)).map(t => t.id));
+    setTimeout(() => { state.freshIds = new Set(); }, 60000);
     rerenderCurrentView();
     const added = s.lastChange?.added || 0;
     if (added) showToast(`${added} new transaction${added !== 1 ? 's' : ''} from your bank`, 'success');

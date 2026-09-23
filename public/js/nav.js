@@ -34,7 +34,9 @@ function goBack() {
 }
 
 // Jump to a section on a page (e.g. the bank-sync card in Settings)
+const SETTINGS_SECTION_TABS = { 'plaid-card': 'bank', 'ai-card': 'ai', 'categories-card': 'categories', 'about-card': 'about', 'currency-card': 'general' };
 function goToSection(view, sectionId) {
+  if (view === 'settings' && SETTINGS_SECTION_TABS[sectionId]) state.settingsTab = SETTINGS_SECTION_TABS[sectionId];
   switchView(view);
   requestAnimationFrame(() => document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 }

@@ -10,6 +10,15 @@ const ASK_SUGGESTIONS = [
   'How does this month compare to last month?',
   'Which subscriptions am I paying for?',
 ];
+// A few that fit where the user is
+function askSuggestions() {
+  const v = state.currentView;
+  if (v === 'trips' && state.tripId) { const t = state.trips.find(x => x.id === state.tripId); if (t) return [`How much per day did I spend on ${t.name}?`, `Where did the money go on ${t.name}?`, `What was my biggest purchase on ${t.name}?`]; }
+  if (v === 'budget') return ['Am I on track for this month?', 'Which categories are over their limit?', 'What could I cut to save $200 a month?'];
+  if (v === 'merchants') return ['Which merchants do I visit most?', 'Where do I spend the most per visit?', 'Any merchant I paid twice by mistake?'];
+  if (v === 'transactions') return ['Anything I haven\'t categorized?', 'Show refunds I got this year', 'Tag last week\'s Bangkok purchases as Thailand'];
+  return ASK_SUGGESTIONS;
+}
 
 // A small, safe markdown: paragraphs, bullet and numbered lists, **bold**, `code`
 function renderMarkdown(text) {
@@ -68,7 +77,7 @@ function renderAsk() {
   }
   if (!ask.messages.length) {
     list.innerHTML = html`<div class="ask-empty"><p>Ask anything about your spending. Only what's needed to answer leaves your Mac.</p></div>`;
-    suggest.innerHTML = html`${ASK_SUGGESTIONS.map(q => html`<button class="chip" onclick="askQuestion('${escAttr(q)}')">${q}</button>`)}`;
+    suggest.innerHTML = html`${askSuggestions().map(q => html`<button class="chip" onclick="askQuestion('${escAttr(q)}')">${q}</button>`)}`;
   } else {
     suggest.innerHTML = '';
     list.innerHTML = html`${ask.messages.map((m, i) => m.role === 'user'

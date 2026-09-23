@@ -36,11 +36,16 @@ function renderDashboard() {
   const allMonths = [...new Set(state.transactions.map(t => t.date?.slice(0, 7)).filter(Boolean))].sort().reverse();
   if (state.dashboardMonth === undefined || (state.dashboardMonth && !allMonths.includes(state.dashboardMonth))) state.dashboardMonth = defaultDashboardMonth(allMonths);
   const month = state.dashboardMonth;
+  const idx = allMonths.indexOf(month);
   document.getElementById('dashboard-filter-bar').innerHTML = html`
-    <select id="dash-month-select" class="period-select" aria-label="Period" onchange="state.dashboardMonth=this.value;renderDashboard()">
-      ${allMonths.map(m => html`<option value="${m}" ${m === month ? 'selected' : ''}>${fmtMonth(m)}</option>`)}
-      <option value="" ${!month ? 'selected' : ''}>All time</option>
-    </select>`;
+    <div class="period-nav">
+      <button class="icon-btn" onclick="stepDashboardMonth(1)" ${!month || idx >= allMonths.length - 1 ? 'disabled' : ''} title="Previous month" aria-label="Previous month">${icon('arrow-left')}</button>
+      <select id="dash-month-select" class="period-select" aria-label="Period" onchange="state.dashboardMonth=this.value;renderDashboard()">
+        ${allMonths.map(m => html`<option value="${m}" ${m === month ? 'selected' : ''}>${fmtMonth(m)}</option>`)}
+        <option value="" ${!month ? 'selected' : ''}>All time</option>
+      </select>
+      <button class="icon-btn" onclick="stepDashboardMonth(-1)" ${!month || idx <= 0 ? 'disabled' : ''} title="Next month" aria-label="Next month">${icon('arrow-right')}</button>
+    </div>`;
 
   // Charts sweep in when the period changes; every other re-render paints in place
   const animate = state._dashDrawnKey !== (month || 'all');
@@ -68,7 +73,8 @@ function renderDashboard() {
     const target = state.monthlyBudget;
     tiles.push({
       label: isCurrent ? 'Spent so far' : 'Spent',
-      value: fmt(total),
+      value: fmtBig(total),
+      action: 'drillMonth()',
       sub: delta === null ? plural(txns.length, 'purchase')
         : html`<span class="${delta > 0 ? 'delta-up' : 'delta-down'}">${delta > 0 ? '▲' : '▼'} ${Math.abs(delta)}%</span> vs ${fmtMonth(prevMonthOf(month), 'short')}`,
       spark: monthlySeries(month),
@@ -77,14 +83,14 @@ function renderDashboard() {
     if (isCurrent) {
       const day = new Date().getDate();
       const days = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
-      tiles.push({ label: 'On pace for', value: fmt(day ? total / day * days : 0), sub: `Day ${day} of ${days} · ${fmt(total / Math.max(day, 1))} a day` });
+      tiles.push({ label: 'On pace for', value: fmtBig(day ? total / day * days : 0), sub: `Day ${day} of ${days} · ${fmt(total / Math.max(day, 1))} a day`, action: "switchView('budget')" });
     } else {
       tiles.push({ label: 'Purchases', value: String(txns.filter(t => t.amount > 0).length), sub: `${fmt(total / new Date(+month.slice(0, 4), +month.slice(5), 0).getDate())} a day` });
     }
   } else {
     const months = allMonths.length;
-    tiles.push({ label: 'Total spent', value: fmt(total), sub: `${plural(months, 'month')} · ${plural(txns.length, 'purchase')}` });
-    tiles.push({ label: 'Monthly average', value: fmt(total / Math.max(months, 1)), sub: 'across all months' });
+    tiles.push({ label: 'Total spent', value: fmtBig(total), sub: `${plural(months, 'month')} · ${plural(txns.length, 'purchase')}`, action: 'drillMonth()' });
+    tiles.push({ label: 'Monthly average', value: fmtBig(total / Math.max(months, 1)), sub: 'across all months' });
   }
   tiles.push(topCat
     ? { label: 'Biggest category', value: topCat[0], sub: `${fmt(topCat[1])} · ${Math.round(topCat[1] / total * 100)}%`, small: true, action: `drillCategory('${escAttr(topCat[0])}')`, color: categoryColor(topCat[0]), spark: month ? monthlySeries(month, topCat[0]) : null }
@@ -93,7 +99,9 @@ function renderDashboard() {
   // Only asks for attention when something needs it
   if (uncategorized.length) tiles.push({ label: 'Needs a category', value: String(uncategorized.length), sub: html`${plural(uncatMerchants, 'merchant')} · <b>categorize</b>`, action: 'openUncategorizedModal()', attention: true });
 
-  document.getElementById('summary-cards').innerHTML = html`${tiles.map(t => statTile(t))}`;
+  const tilesEl = document.getElementById('summary-cards');
+  tilesEl.classList.toggle('tiles-in', animate);
+  tilesEl.innerHTML = html`${tiles.map(t => statTile(t))}`;
 
   // ---- Category breakdown ----
   document.getElementById('category-note').textContent = month ? fmtMonth(month) : 'All time';
@@ -216,7 +224,7 @@ function renderSafeToSpendTile(budget) {
     const perDay = left / Math.max(daysLeft, 1);
     t = left < 0
       ? { cls: 'stat-tile-safe', label: 'Safe to spend', value: fmt(0), sub: html`<b>${fmt(-left)} over</b> this month's income after ${fmt(budget.fixed)} fixed`, over: true, action: "switchView('budget')" }
-      : { cls: 'stat-tile-safe', label: 'Safe to spend', value: `${fmt(perDay)}/day`, sub: `${fmt(left)} left · ${plural(daysLeft, 'day')} to go`, action: "switchView('budget')", bar: { pct: Math.min(spent / Math.max(budget.income - budget.fixed, 1), 1), warn: spent / Math.max(budget.income - budget.fixed, 1) > 0.85, over: false, note: `${fmt(budget.income)} income − ${fmt(budget.fixed)} fixed` } };
+      : { cls: 'stat-tile-safe', label: 'Safe to spend', value: html`${fmtBig(perDay)}<span class="stat-unit">/day</span>`, sub: `${fmt(left)} left · ${plural(daysLeft, 'day')} to go`, action: "switchView('budget')", bar: { pct: Math.min(spent / Math.max(budget.income - budget.fixed, 1), 1), warn: spent / Math.max(budget.income - budget.fixed, 1) > 0.85, over: false, note: `${fmt(budget.income)} income − ${fmt(budget.fixed)} fixed` } };
   }
   const el = document.createElement('div');
   el.innerHTML = statTile(t);
@@ -234,7 +242,7 @@ function renderOwedTile() {
   if (!owed.length) return;
   const total = owed.reduce((s, t) => s + t.amount, 0);
   const el = document.createElement('div');
-  el.innerHTML = statTile({ cls: 'stat-tile-owed', label: 'Owed to you', value: fmt(total), sub: html`${plural(owed.length, 'purchase')} · <b>see them</b>`, action: 'showOwed()' });
+  el.innerHTML = statTile({ cls: 'stat-tile-owed', label: 'Owed to you', value: fmtBig(total), sub: html`${plural(owed.length, 'purchase')} · <b>see them</b>`, action: 'showOwed()' });
   tiles.appendChild(el.firstElementChild);
 }
 function showOwed() {
@@ -337,9 +345,27 @@ function clearAllCaches() {
   state.budgetInsight = {};
 }
 
+// allMonths is newest first: +1 goes back in time
+function stepDashboardMonth(delta) {
+  const allMonths = [...new Set(state.transactions.map(t => t.date?.slice(0, 7)).filter(Boolean))].sort().reverse();
+  const idx = allMonths.indexOf(state.dashboardMonth);
+  const next = allMonths[idx + delta];
+  if (!next) return;
+  state.dashboardMonth = next;
+  renderDashboard();
+}
+
 function toggleTrendView() {
   state.trendShowAll = !state.trendShowAll;
   renderDashboard();
+}
+
+// The period's purchases, in the list
+function drillMonth() {
+  clearFilterInputs();
+  state.jumpToMonth = state.dashboardMonth;
+  state.groupByVendor = false;
+  switchView('transactions');
 }
 
 function drillCategory(category) {
@@ -489,7 +515,7 @@ function renderNextPaymentTile(next) {
   tile.onclick = () => document.getElementById('cards-due-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   tile.innerHTML = html`
     <div class="stat-label">Next payment</div>
-    <div class="stat-value stat-value-sm">${l.lastStatementBalance != null ? fmt(l.lastStatementBalance) : '—'}</div>
+    <div class="stat-value stat-value-sm">${l.lastStatementBalance != null ? fmtBig(l.lastStatementBalance) : '—'}</div>
     <div class="stat-sub">${next.card || next.name} · <b>${next.status.text.toLowerCase()}</b></div>`;
   tiles.appendChild(tile);
 }

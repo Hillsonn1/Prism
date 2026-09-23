@@ -53,6 +53,12 @@ function currencyFormat(code) {
 function fmt(amount) {
   return usd.format(amount);
 }
+// "$1,034" with the ".14" stepped back — for big figures
+function fmtBig(amount) {
+  const s = usd.format(amount);
+  const m = s.match(/^(.*?)(\.\d{2})$/);
+  return m ? html`${m[1]}<span class="money-cents">${m[2]}</span>` : html`${s}`;
+}
 
 // The original amount for purchases made in another currency ("₪120", "฿350")
 function fmtOriginal(t) {

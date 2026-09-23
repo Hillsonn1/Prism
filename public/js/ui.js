@@ -1,14 +1,25 @@
 // Toasts and in-app dialogs (no native prompt/confirm).
 
-function showToast(msg, type = '') {
+// showToast(message, type, { action: { label, onClick }, duration })
+let _toastTimer = null;
+function showToast(msg, type = '', { action = null, duration = null } = {}) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
   const t = document.createElement('div');
   t.className = `toast ${type}`;
-  t.textContent = msg;
+  const text = document.createElement('span');
+  text.textContent = msg;
+  t.appendChild(text);
+  if (action) {
+    const b = document.createElement('button');
+    b.className = 'toast-action';
+    b.textContent = action.label;
+    b.onclick = () => { dismiss(); action.onClick(); };
+    t.appendChild(b);
+  }
   document.body.appendChild(t);
-  setTimeout(() => {
-    t.classList.add('removing');
-    setTimeout(() => t.remove(), 220);
-  }, 2600);
+  const dismiss = () => { t.classList.add('removing'); setTimeout(() => t.remove(), 220); };
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(dismiss, duration || (action ? 6000 : 2600));
 }
 
 // One dialog element, reused. Resolves with the user's answer.
@@ -117,3 +128,28 @@ function applyTheme(theme) {
   try { localStorage.setItem('prism-theme', theme === 'dark' || theme === 'light' ? theme : 'system'); } catch {}
 }
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme((typeof state !== 'undefined' && state.prefs.theme) || 'system'));
+
+// ---- Popover menus (filters, ⋯ menus) ----
+function toggleMenu(e, id) {
+  e.stopPropagation();
+  const el = document.getElementById(id);
+  const open = el.style.display !== 'none';
+  closeMenus();
+  if (open) return;
+  el.style.display = '';
+  // Keep it on screen: flip to the left edge of the trigger when it would overflow
+  const wrap = el.closest('.menu-wrap');
+  if (wrap) {
+    el.style.left = ''; el.style.right = '';
+    const r = el.getBoundingClientRect();
+    if (r.right > window.innerWidth - 8) { el.style.left = 'auto'; el.style.right = '0'; }
+  }
+  el.querySelector('input, select, button')?.focus({ preventScroll: true });
+}
+function closeMenus() {
+  document.querySelectorAll('.popover').forEach(p => { if (!p.classList.contains('category-popup')) p.style.display = 'none'; });
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.popover') && !e.target.closest('.menu-btn')) closeMenus();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMenus(); });

@@ -52,7 +52,7 @@ function renderMerchants() {
   table.style.display = '';
   document.getElementById('merchants-body').innerHTML = html`${filtered.map(([merchant, category]) => html`
     <tr>
-      <td><div class="merchant-cell">${merchantAvatar(merchant, { logoUrl: logos[merchant], category, size: 'sm' })}<span class="merchant-link" onclick="jumpToMerchant('${escAttr(merchant)}')" title="See transactions">${merchant}</span></div></td>
+      <td><div class="merchant-cell">${merchantAvatar(merchant, { logoUrl: logos[merchant], category, size: 'sm' })}<div class="merchant-cell-main"><span class="merchant-link" onclick="jumpToMerchant('${escAttr(merchant)}')" title="See transactions">${merchant}</span>${state.merchantInfo?.[merchant]?.type ? html`<span class="merchant-type muted">${state.merchantInfo[merchant].type}${state.merchantInfo[merchant].nativeName ? html` · <span dir="auto">${state.merchantInfo[merchant].nativeName}</span>` : ''}</span>` : ''}</div></div></td>
       <td>${categoryBadge(category, `openCategoryPopupForMerchant(event,'${escAttr(merchant)}')`)}</td>
       <td>${txnCounts[merchant] || 0}</td>
       <td><div class="merchant-total">${series[merchant] && series[merchant].filter(Boolean).length > 1 ? html`<span class="chart-spark" title="Last 6 months">${sparkline(series[merchant], { width: 48, height: 16, color: categoryColor(category) })}</span>` : ''}<span class="amount">${fmt(totals[merchant] || 0)}</span></div></td>

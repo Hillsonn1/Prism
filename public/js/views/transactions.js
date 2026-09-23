@@ -111,7 +111,7 @@ function txnItem(t, { showDate = false } = {}) {
   if (t.card) sub.push(html`<span class="txn-sub-card">${t.card}</span>`);
   if (t.notes) sub.push(html`<span class="txn-sub-note">${t.notes}</span>`);
   return html`
-    <div class="txn-item ${countsAsSpend(t) ? '' : 'txn-item-out'}" onclick="openEditModal('${t.id}')" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openEditModal('${t.id}')">
+    <div class="txn-item ${countsAsSpend(t) ? '' : 'txn-item-out'} ${state.freshIds?.has(t.id) ? 'txn-item-new' : ''}" onclick="openEditModal('${t.id}')" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openEditModal('${t.id}')">
       ${merchantAvatar(t.merchant, { logoUrl: t.logoUrl, category: t.category })}
       <div class="txn-main">
         <div class="txn-merchant"><span class="merchant-link" onclick="event.stopPropagation();goToMerchant('${escAttr(t.merchant)}')" title="${state.merchantInfo?.[t.merchant]?.description || `All purchases from ${t.merchant}`}">${t.merchant}</span>${state.merchantInfo?.[t.merchant]?.nativeName ? html`<span class="txn-native" dir="auto">${state.merchantInfo[t.merchant].nativeName}</span>` : ''}${txnPills(t)}</div>
@@ -151,6 +151,8 @@ function toggleChip(key) {
 
 function renderTransactions() {
   populateFilterDropdowns();
+  const header = document.querySelector('#view-transactions .page-header');
+  if (header) document.documentElement.style.setProperty('--header-h', header.offsetHeight + 'px');
 
   if (state.merchantFilter !== null) {
     const el = document.getElementById('filter-merchant');
@@ -171,9 +173,12 @@ function renderTransactions() {
   renderChips(base);
   const filtered = getSorted(getFiltered());
   const f = getFilters();
-  const anyFilter = Boolean(f.cat || f.search || f.card || f.tag || f.from || f.to || !Number.isNaN(f.min) || !Number.isNaN(f.max) || state.quickFilters.size);
+  const more = [f.card, f.tag, f.from, f.to, !Number.isNaN(f.min), !Number.isNaN(f.max)].filter(Boolean).length;
+  const anyFilter = Boolean(f.cat || f.search || more || state.quickFilters.size || document.getElementById('filter-month')?.value);
   const clearBtn = document.getElementById('filter-clear');
-  if (clearBtn) clearBtn.style.visibility = anyFilter ? 'visible' : 'hidden';
+  if (clearBtn) clearBtn.style.display = anyFilter ? '' : 'none';
+  const moreBtn = document.getElementById('filter-more-btn');
+  if (moreBtn) { moreBtn.classList.toggle('btn-active', more > 0); document.getElementById('filter-more-count').textContent = more ? String(more) : ''; }
   const list = document.getElementById('transactions-list');
   const empty = document.getElementById('transactions-empty');
   document.getElementById('txn-count').textContent = plural(filtered.length, 'transaction');
@@ -184,11 +189,7 @@ function renderTransactions() {
     totalEl.title = counted.length !== filtered.length ? `${plural(filtered.length - counted.length, 'row')} left out of the total` : '';
   }
 
-  const groupBtn = document.getElementById('group-toggle');
-  if (groupBtn) {
-    groupBtn.textContent = state.groupByVendor ? 'Show individually' : 'Group by merchant';
-    groupBtn.classList.toggle('btn-active', state.groupByVendor);
-  }
+  document.querySelectorAll('#txn-mode button').forEach(b => b.classList.toggle('seg-active', (b.dataset.mode === 'merchant') === state.groupByVendor));
 
   if (!filtered.length) {
     list.innerHTML = '';
@@ -265,8 +266,8 @@ function setSortMode(mode) {
   renderTransactions();
 }
 
-function toggleGroup() {
-  state.groupByVendor = !state.groupByVendor;
+function setTxnMode(mode) {
+  state.groupByVendor = mode === 'merchant';
   state.expandedMerchants.clear();
   renderTransactions();
 }
@@ -334,16 +335,31 @@ function populateFilterDropdowns() {
   if (cardSel) {
     const cur = cardSel.value;
     cardSel.innerHTML = html`<option value="">All cards</option>${cards.map(c => html`<option value="${c}" ${c === cur ? 'selected' : ''}>${c}</option>`)}`;
-    cardSel.style.display = cards.length ? '' : 'none';
+    (cardSel.closest('label') || cardSel).style.display = cards.length ? '' : 'none';
   }
   const tagSel = document.getElementById('filter-tag');
   if (tagSel) {
     const cur = tagSel.value;
     tagSel.innerHTML = html`<option value="">All tags</option>${tags.map(t => html`<option value="${t}" ${t === cur ? 'selected' : ''}>${t}</option>`)}`;
-    tagSel.style.display = tags.length ? '' : 'none';
+    (tagSel.closest('label') || tagSel).style.display = tags.length ? '' : 'none';
   }
   const tagList = document.getElementById('tag-suggestions');
   if (tagList) tagList.innerHTML = html`${tags.map(t => html`<option value="${t}"></option>`)}`;
+  const merchantList = document.getElementById('merchant-suggestions');
+  if (merchantList) {
+    const counts = {};
+    for (const t of state.transactions) counts[t.merchant] = (counts[t.merchant] || 0) + 1;
+    merchantList.innerHTML = html`${Object.keys(counts).sort((a, b) => counts[b] - counts[a]).slice(0, 400).map(m => html`<option value="${m}"></option>`)}`;
+  }
+}
+
+// Adding by hand: a merchant Prism knows fills in its category
+function onEditMerchantChange() {
+  if (!state.addingTransaction) return;
+  const name = document.getElementById('edit-merchant').value.trim();
+  const sel = document.getElementById('edit-category');
+  const known = state.merchants[name] || state.transactions.find(t => t.merchant === name && t.category)?.category;
+  if (known && !sel.value) sel.value = known;
 }
 
 function setDateRangeToMonth(month) {
@@ -470,9 +486,16 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeModal(); closeCategoryPopup(); closeEditModal(); if (typeof closeTripModal === 'function') closeTripModal(); }
-  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
-  if (e.key === '/' && !typing && state.currentView === 'transactions') { e.preventDefault(); document.getElementById('filter-merchant')?.focus(); }
+  const typing = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) || e.target.isContentEditable;
+  const modalOpen = [...document.querySelectorAll('.modal-overlay')].some(m => m.style.display !== 'none');
+  if (typing || modalOpen || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === '/') { e.preventDefault(); if (state.currentView !== 'transactions') switchView('transactions'); document.getElementById('filter-merchant')?.focus(); }
+  if (e.key === 'n') { e.preventDefault(); if (state.currentView !== 'transactions') switchView('transactions'); openAddModal(); }
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && state.currentView === 'dashboard') { e.preventDefault(); stepDashboardMonth(e.key === 'ArrowLeft' ? 1 : -1); }
 });
+// The amount field selects itself so a new figure replaces the old one
+document.getElementById('edit-amount')?.addEventListener('focus', e => e.target.select());
+document.getElementById('edit-merchant')?.addEventListener('change', onEditMerchantChange);
 
 
 // ---- Add / edit modal ----
@@ -574,10 +597,11 @@ function onTagInputChange(e) { // picked from the suggestions list
   if (e.target.value) { addEditTag(e.target.value); e.target.value = ''; }
 }
 
-// ---- Spending flags ----
-function onEditFlagsChange() {
-  const reimbursable = document.getElementById('edit-reimbursable').checked;
-  document.getElementById('edit-reimbursed-wrap').style.display = reimbursable ? '' : 'none';
+// ---- What a purchase counts as: my spending / not mine / owed to me ----
+function setEditKind(kind) {
+  state.editKind = kind;
+  document.querySelectorAll('#edit-kind button').forEach(b => b.classList.toggle('seg-active', b.dataset.kind === kind));
+  document.getElementById('edit-reimbursed-wrap').style.display = kind === 'owed' ? '' : 'none';
 }
 
 // ---- Refund links ----
@@ -648,16 +672,14 @@ function _fillEditModal({ title, subtitle, txn }) {
   const curSel = document.getElementById('edit-currency');
   if (foreign && ![...curSel.options].some(o => o.value === foreign)) curSel.add(new Option(foreign, foreign));
   curSel.value = foreign || 'USD';
-  document.getElementById('edit-amount').value = txn ? Math.abs(txn.amount) : '';
-  document.getElementById('edit-original').value = foreign ? Math.abs(txn.originalAmount) : '';
+  document.getElementById('edit-amount').value = txn ? Math.abs(foreign ? txn.originalAmount : txn.amount) : '';
   document.getElementById('edit-credit').checked = txn ? txn.amount < 0 : false;
   state.editTags = [...(txn?.tags || [])];
   renderEditTags();
   document.getElementById('edit-tag-input').value = '';
-  document.getElementById('edit-excluded').checked = Boolean(txn?.excluded);
-  document.getElementById('edit-reimbursable').checked = Boolean(txn?.reimbursable);
+  setEditKind(txn?.reimbursable ? 'owed' : txn?.excluded ? 'excluded' : 'spend');
   document.getElementById('edit-reimbursed').checked = Boolean(txn?.reimbursedAt);
-  onEditFlagsChange();
+  document.getElementById('edit-delete-btn').style.display = txn ? '' : 'none';
   onEditCurrencyChange();
   renderRefundSection(txn);
   const refunds = txn && txn.amount > 0 ? refundsOf(txn.id) : [];
@@ -688,9 +710,6 @@ function openEditModal(txnId) {
 function onEditCurrencyChange() {
   const cur = document.getElementById('edit-currency').value;
   const foreign = cur !== 'USD';
-  document.getElementById('edit-amount-field').style.display = foreign ? 'none' : '';
-  document.getElementById('edit-original-field').style.display = foreign ? '' : 'none';
-  document.getElementById('edit-original-label').textContent = `Amount (${cur})`;
   const hint = document.getElementById('edit-fx-hint');
   if (!foreign) { hint.textContent = ''; return; }
   const latest = state.currency?.latest;
@@ -726,24 +745,22 @@ async function saveEditModal() {
   const sign = credit ? -1 : 1;
   const pendingTag = document.getElementById('edit-tag-input').value;
   if (pendingTag) { addEditTag(pendingTag); document.getElementById('edit-tag-input').value = ''; }
-  const reimbursable = document.getElementById('edit-reimbursable').checked;
+  const reimbursable = state.editKind === 'owed';
   const existing = state.editingTxnId ? state.transactions.find(t => t.id === state.editingTxnId) : null;
   const repaid = reimbursable && document.getElementById('edit-reimbursed').checked;
   const body = {
     merchant, date, category, notes,
     tags: state.editTags,
-    excluded: document.getElementById('edit-excluded').checked,
+    excluded: state.editKind === 'excluded',
     reimbursable,
     reimbursedAt: repaid ? (existing?.reimbursedAt || true) : null,
   };
+  const amount = parseFloat(document.getElementById('edit-amount').value);
+  if (isNaN(amount)) { showToast(`Enter the amount${shekels ? ` in ${currency}` : ''}`, 'error'); return; }
   if (shekels) {
-    const orig = parseFloat(document.getElementById('edit-original').value);
-    if (isNaN(orig)) { showToast(`Enter the ${currency} amount`, 'error'); return; }
     body.originalCurrency = currency;
-    body.originalAmount = sign * Math.abs(orig);
+    body.originalAmount = sign * Math.abs(amount);
   } else {
-    const amount = parseFloat(document.getElementById('edit-amount').value);
-    if (isNaN(amount)) { showToast('Enter an amount', 'error'); return; }
     body.amount = sign * Math.abs(amount);
     body.originalCurrency = 'USD';
   }
@@ -752,6 +769,8 @@ async function saveEditModal() {
     if (state.addingTransaction) {
       const newTxn = await api('POST', '/api/transactions', body);
       state.transactions.push(newTxn);
+      (state.freshIds = state.freshIds || new Set()).add(newTxn.id);
+      setTimeout(() => state.freshIds?.delete(newTxn.id), 60000);
       showToast('Transaction added', 'success');
     } else {
       const updated = await api('PUT', `/api/transactions/${state.editingTxnId}`, body);
@@ -777,18 +796,35 @@ async function deleteTransaction() {
   deleteTransactionById(txnId);
 }
 
+// Deletes right away and offers Undo, instead of asking first
 async function deleteTransactionById(id) {
   const t = state.transactions.find(x => x.id === id);
-  if (!await confirmAction('Delete this transaction?', t ? `${fmt(t.amount)} at ${t.merchant} on ${fmtDate(t.date)}. This cannot be undone.` : 'This cannot be undone.')) return;
+  if (!t) return;
+  const snapshot = JSON.parse(JSON.stringify(t));
+  const refundsOfIt = state.transactions.filter(x => x.refundOf === id).map(x => x.id);
   try {
     await api('DELETE', `/api/transactions/${id}`);
     state.transactions = state.transactions.filter(x => x.id !== id);
     for (const x of state.transactions) if (x.refundOf === id) delete x.refundOf;
     state.txVersion++;
     clearDashboardCaches();
-    renderTransactions();
-    if (state.currentView === 'dashboard') renderDashboard();
-    showToast('Transaction deleted', 'success');
+    rerenderCurrentView();
+    showToast(`Deleted ${fmt(snapshot.amount)} at ${snapshot.merchant}`, '', {
+      action: { label: 'Undo', onClick: async () => {
+        try {
+          const r = await api('POST', '/api/transactions/restore', { transaction: snapshot });
+          if (r.restored) {
+            state.transactions.push(r.transaction);
+            for (const rid of refundsOfIt) await api('POST', `/api/transactions/${rid}/refund-of`, { purchaseId: id }).catch(() => {});
+            state.txVersion++;
+            clearDashboardCaches();
+            await loadAll();
+            rerenderCurrentView();
+            showToast('Restored', 'success');
+          }
+        } catch (err) { showToast('Could not restore: ' + err.message, 'error'); }
+      } },
+    });
   } catch (err) {
     showToast('Could not delete: ' + err.message, 'error');
   }

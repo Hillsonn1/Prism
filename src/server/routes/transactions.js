@@ -142,6 +142,21 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
     res.json({ matched });
   });
 
+  // Undo for a delete: puts a row back exactly as it was (system fields included)
+  router.post('/transactions/restore', route((req, res) => {
+    const t = req.body.transaction;
+    if (!t || typeof t !== 'object' || typeof t.id !== 'string') return res.status(400).json({ error: 'Nothing to restore' });
+    const fields = transactionFields(t);
+    const row = { ...t, ...fields };
+    let restored = false;
+    store.update('transactions', list => {
+      if (list.some(x => x.id === row.id)) return;
+      list.push(row);
+      restored = true;
+    });
+    res.json({ restored, transaction: row });
+  }));
+
   router.delete('/transactions/:id', (req, res) => {
     let found = false;
     store.update('transactions', list => {

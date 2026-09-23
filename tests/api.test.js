@@ -195,3 +195,20 @@ test('AI endpoints degrade gracefully without a key; receipts become transaction
     assert.equal((await api('POST', '/api/explain/nope', {})).status, 404);
   } finally { await close(); }
 });
+
+test('a deleted transaction can be restored exactly as it was', async () => {
+  const { api, close } = await boot();
+  try {
+    const { data: t } = await api('POST', '/api/transactions', { date: '2026-09-20', merchant: 'Gett', amount: 18.5, category: 'Travel & Transport', tags: ['Work'] });
+    await api('DELETE', `/api/transactions/${t.id}`);
+    assert.equal((await api('GET', '/api/transactions')).data.length, 0);
+    const r = (await api('POST', '/api/transactions/restore', { transaction: t })).data;
+    assert.equal(r.restored, true);
+    const back = (await api('GET', '/api/transactions')).data[0];
+    assert.equal(back.id, t.id);
+    assert.deepEqual(back.tags, ['Work']);
+    assert.equal(back.categorySource, 'user');
+    assert.equal((await api('POST', '/api/transactions/restore', { transaction: t })).data.restored, false, 'not twice');
+    assert.equal((await api('POST', '/api/transactions/restore', { transaction: { id: 'x' } })).status, 400);
+  } finally { await close(); }
+});
