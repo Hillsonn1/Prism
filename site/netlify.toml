@@ -16,3 +16,8 @@
   for = "/apple-touch-icon-precomposed.png"
   [headers.values]
     Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/shots/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

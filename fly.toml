@@ -1,0 +1,23 @@
+# Fly.io: `fly launch --copy-config --no-deploy`, `fly volumes create prism_data --size 1`,
+# `fly secrets set PRISM_SECRET=$(openssl rand -hex 32)`, then `fly deploy`.
+app = "prism-spend"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PRISM_HOSTED = "1"
+  PRISM_DATA_DIR = "/data"
+  PORT = "3000"
+  NODE_ENV = "production"
+
+[[mounts]]
+  source = "prism_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false
+  min_machines_running = 1

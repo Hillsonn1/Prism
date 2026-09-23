@@ -6,457 +6,329 @@
   <link rel="icon" type="image/x-icon" href="/favicon.ico" />
   <link rel="icon" type="image/png" href="/favicon.png" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-  <link rel="apple-touch-icon-precomposed" href="/apple-touch-icon-precomposed.png" />
-  <title>Prism — Personal Finance Tracker</title>
-  <meta name="description" content="Prism is a private, AI-powered spending tracker for Mac and Windows. Upload bank statements, track categories, and get smart insights — entirely on your device." />
+  <title>Prism — See where your money goes. Keep it to yourself.</title>
+  <meta name="description" content="Prism is a private spending tracker for Mac, Windows and the browser. Bank sync or statements in, a clean ledger out — with trips, refunds, card due dates, and an assistant you can ask anything." />
+  <meta property="og:title" content="Prism — See where your money goes. Keep it to yourself." />
+  <meta property="og:description" content="A private spending tracker with bank sync, statements and receipts read by AI, trips, and an assistant you can ask anything." />
+  <meta property="og:image" content="https://prismspendtracker.netlify.app/shots/dashboard.png" />
+  <meta property="og:type" content="website" />
+  <script src="/config.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     :root {
-      --brand:   #394c68;
-      --brand-d: #2a3a52;
-      --primary: #2563eb;
-      --primary-h: #1d4ed8;
-      --bg:      #f8fafc;
-      --surface: #ffffff;
-      --border:  #e2e8f0;
-      --text:    #1e293b;
-      --muted:   #64748b;
-      --radius:  12px;
+      --navy: #394c66; --navy-2: #2d3d54; --navy-3: #233145;
+      --bg: #f5f5f7; --surface: #fff; --surface-2: #f6f6f8;
+      --text: #1d1d1f; --text-2: #3a3a3c; --muted: #6e6e73; --muted-2: #aeaeb2;
+      --border: rgba(0,0,0,.075); --border-strong: rgba(0,0,0,.14);
+      --accent: #0071e3; --accent-h: #0066cc; --green: #34c759; --orange: #ff9500; --violet: #5e5ce6; --pink: #ff2d55;
+      --radius: 16px; --radius-sm: 10px;
+      --shadow-1: 0 1px 2px rgba(0,0,0,.04), 0 0 0 1px var(--border);
+      --shadow-2: 0 8px 28px rgba(0,0,0,.08), 0 1px 3px rgba(0,0,0,.04);
+      --shadow-3: 0 40px 100px rgba(0,0,0,.28), 0 8px 24px rgba(0,0,0,.12);
+      --ease: cubic-bezier(.2,.8,.2,1);
     }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 17px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    img { display: block; max-width: 100%; height: auto; }
+    a { color: inherit; text-decoration: none; }
+    .wrap { width: min(1120px, calc(100% - 3rem)); margin: 0 auto; }
+    .eyebrow { font-size: .78rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--accent); margin-bottom: .8rem; }
+    h2.title { font-size: clamp(1.7rem, 3.4vw, 2.5rem); font-weight: 800; letter-spacing: -.03em; line-height: 1.12; }
+    .lead { color: var(--muted); font-size: 1.1rem; max-width: 58ch; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: .5rem; padding: .85rem 1.5rem; border-radius: 12px; font-weight: 600; font-size: 1rem; border: 1px solid transparent; cursor: pointer; font-family: inherit; transition: transform 140ms var(--ease), background 160ms var(--ease), box-shadow 160ms var(--ease); white-space: nowrap; }
+    .btn:active { transform: scale(.97); }
+    .btn-primary { background: var(--accent); color: #fff; box-shadow: 0 6px 20px rgba(0,113,227,.35); }
+    .btn-primary:hover { background: var(--accent-h); transform: translateY(-1px); }
+    .btn-light { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.18); }
+    .btn-light:hover { background: rgba(255,255,255,.18); }
+    .btn-secondary { background: var(--surface); color: var(--text); box-shadow: var(--shadow-1); }
+    .btn-secondary:hover { box-shadow: var(--shadow-2); transform: translateY(-1px); }
+    .btn-sm { padding: .55rem 1rem; font-size: .9rem; border-radius: 10px; }
+    .hidden { display: none !important; }
 
-    html { scroll-behavior: smooth; }
-
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 16px;
-      line-height: 1.6;
-    }
+    /* ---- Nav ---- */
+    .nav { position: sticky; top: 0; z-index: 50; background: rgba(57,76,102,.85); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border-bottom: 1px solid rgba(255,255,255,.08); }
+    .nav-in { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+    .nav-brand img { height: 38px; width: auto; }
+    .nav-links { display: flex; gap: 1.6rem; align-items: center; }
+    .nav-links a { color: rgba(255,255,255,.78); font-size: .92rem; font-weight: 500; }
+    .nav-links a:hover { color: #fff; }
+    .nav-cta { display: flex; gap: .6rem; align-items: center; }
 
     /* ---- Hero ---- */
-    .hero {
-      background: #394c65;
-      color: #e2e8f0;
-      text-align: center;
-      padding: 5rem 1.5rem 4.5rem;
-    }
+    .hero { position: relative; overflow: hidden; background: radial-gradient(1200px 600px at 20% -10%, #4a6285 0%, transparent 60%), radial-gradient(900px 500px at 90% 10%, rgba(94,92,230,.35) 0%, transparent 60%), var(--navy); color: #fff; padding: 5.5rem 0 0; }
+    .hero-in { text-align: center; max-width: 860px; margin: 0 auto; }
+    .hero .eyebrow { color: #a9c4ff; }
+    .hero h1 { font-size: clamp(2.5rem, 6vw, 4.4rem); font-weight: 800; letter-spacing: -.035em; line-height: 1.05; margin-bottom: 1.25rem; }
+    .hero h1 em { font-style: normal; background: linear-gradient(90deg, #ff6482, #ffd60a, #34c759, #64d2ff, #bf5af2); -webkit-background-clip: text; background-clip: text; color: transparent; }
+    .hero p { font-size: clamp(1.05rem, 1.6vw, 1.25rem); color: rgba(255,255,255,.78); max-width: 62ch; margin: 0 auto 2.25rem; line-height: 1.6; }
+    .hero-cta { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1rem; }
+    .hero-meta { font-size: .85rem; color: rgba(255,255,255,.55); }
+    .hero-meta a { color: rgba(255,255,255,.75); text-decoration: underline; text-underline-offset: 3px; }
+    .hero-shot { position: relative; margin: 3.5rem auto -1px; width: min(1120px, calc(100% - 3rem)); }
+    .hero-shot::before { content: ''; position: absolute; inset: 10% -5% -10%; background: radial-gradient(60% 50% at 30% 40%, rgba(100,210,255,.35), transparent 70%), radial-gradient(50% 50% at 75% 60%, rgba(191,90,242,.35), transparent 70%); filter: blur(40px); z-index: 0; }
+    .shot { position: relative; z-index: 1; border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-3); border: 1px solid rgba(255,255,255,.12); background: #fff; }
+    .hero-shot .shot { border-radius: 14px 14px 0 0; border-bottom: none; max-height: 560px; }
+    .hero-shot img { width: 100%; }
+    .hero-shot::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 160px; background: linear-gradient(to bottom, rgba(245,245,247,0), var(--bg)); z-index: 2; pointer-events: none; }
+    .after-hero { background: var(--bg); height: 1rem; }
 
-    .hero-wordmark {
-      margin-bottom: 2.5rem;
-    }
+    /* ---- Sections ---- */
+    section { padding: 5rem 0; }
+    .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-top: 2.5rem; }
+    .step { background: var(--surface); border-radius: var(--radius); padding: 1.6rem; box-shadow: var(--shadow-1); }
+    .step-n { display: inline-flex; width: 34px; height: 34px; border-radius: 10px; align-items: center; justify-content: center; font-weight: 800; color: #fff; background: var(--accent); margin-bottom: 1rem; }
+    .step:nth-child(2) .step-n { background: var(--violet); }
+    .step:nth-child(3) .step-n { background: var(--green); }
+    .step h3 { font-size: 1.1rem; font-weight: 700; letter-spacing: -.01em; margin-bottom: .4rem; }
+    .step p { color: var(--muted); font-size: .98rem; }
 
-    .hero h1 {
-      font-size: clamp(2rem, 5vw, 3.25rem);
-      font-weight: 800;
-      line-height: 1.15;
-      letter-spacing: -.03em;
-      color: #f8fafc;
-      margin-bottom: 1.25rem;
-    }
+    .feature { display: grid; grid-template-columns: 1fr 1.25fr; gap: 3.5rem; align-items: center; padding: 3.5rem 0; }
+    .feature.flip { grid-template-columns: 1.25fr 1fr; }
+    .feature.flip .feature-text { order: 2; }
+    .feature-text h3 { font-size: clamp(1.5rem, 2.6vw, 2.1rem); font-weight: 800; letter-spacing: -.03em; line-height: 1.15; margin-bottom: .9rem; }
+    .feature-text p { color: var(--muted); font-size: 1.05rem; margin-bottom: 1.1rem; }
+    .feature-list { list-style: none; display: flex; flex-direction: column; gap: .6rem; }
+    .feature-list li { display: flex; gap: .6rem; align-items: flex-start; font-size: .98rem; color: var(--text-2); }
+    .feature-list li::before { content: ''; flex: 0 0 8px; height: 8px; margin-top: .55rem; border-radius: 50%; background: var(--accent); }
+    .feature.f-ask .feature-list li::before { background: var(--violet); }
+    .feature.f-trips .feature-list li::before { background: var(--green); }
+    .feature .shot { box-shadow: var(--shadow-2), 0 24px 60px rgba(0,0,0,.14); }
 
-    .hero-sub {
-      font-size: 1.1rem;
-      color: #94a3b8;
-      max-width: 560px;
-      margin: 0 auto 2.75rem;
-      line-height: 1.65;
-    }
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-top: 2.5rem; }
+    .cell { background: var(--surface); border-radius: var(--radius); padding: 1.4rem; box-shadow: var(--shadow-1); transition: transform 160ms var(--ease), box-shadow 160ms var(--ease); }
+    .cell:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
+    .cell-icon { width: 38px; height: 38px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: .9rem; color: #fff; }
+    .cell-icon svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .cell h4 { font-size: 1rem; font-weight: 700; margin-bottom: .3rem; letter-spacing: -.01em; }
+    .cell p { color: var(--muted); font-size: .92rem; line-height: 1.5; }
 
-    /* ---- Download buttons ---- */
-    .download-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 1.1rem;
-    }
+    .privacy { background: var(--navy); color: #fff; }
+    .privacy .eyebrow { color: #a9c4ff; }
+    .privacy h2 { color: #fff; }
+    .privacy .lead { color: rgba(255,255,255,.72); }
+    .privacy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; margin-top: 2.5rem; }
+    .privacy-card { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.1); border-radius: var(--radius); padding: 1.5rem; }
+    .privacy-card h4 { font-weight: 700; margin-bottom: .4rem; }
+    .privacy-card p { color: rgba(255,255,255,.7); font-size: .95rem; }
+    .privacy-card a { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
 
-    .download-primary {
-      display: inline-flex;
-      align-items: center;
-      gap: .6rem;
-      padding: .9rem 2rem;
-      background: var(--primary);
-      color: #fff;
-      border-radius: var(--radius);
-      font-size: 1.05rem;
-      font-weight: 700;
-      text-decoration: none;
-      transition: background .15s, transform .12s, box-shadow .15s;
-      box-shadow: 0 4px 14px rgba(37,99,235,.4);
-    }
-    .download-primary:hover {
-      background: var(--primary-h);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 20px rgba(37,99,235,.45);
-    }
-    .download-primary:active { transform: translateY(0); }
+    .download { text-align: center; }
+    .dl-buttons { display: flex; gap: .75rem; justify-content: center; flex-wrap: wrap; margin: 2rem 0 .75rem; }
+    .dl-note { color: var(--muted); font-size: .9rem; }
+    .dl-web { margin-top: 2.25rem; padding-top: 2rem; border-top: 1px solid var(--border-strong); }
+    .dl-web p { color: var(--muted); margin-bottom: 1rem; }
 
-    .download-platform-icon { font-size: 1.2rem; line-height: 1; }
+    .faq { max-width: 760px; margin: 2rem auto 0; }
+    .faq details { background: var(--surface); border-radius: var(--radius-sm); box-shadow: var(--shadow-1); padding: .2rem 1.25rem; margin-bottom: .6rem; }
+    .faq summary { cursor: pointer; font-weight: 600; padding: .9rem 0; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+    .faq summary::-webkit-details-marker { display: none; }
+    .faq summary::after { content: '+'; color: var(--muted); font-weight: 400; font-size: 1.3rem; transition: transform 160ms var(--ease); }
+    .faq details[open] summary::after { transform: rotate(45deg); }
+    .faq p { color: var(--muted); padding: 0 0 1rem; font-size: .98rem; }
 
-    .download-alt {
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      gap: .5rem .75rem;
-    }
-    .download-alt a {
-      color: #7dd3fc;
-      font-size: .88rem;
-      text-decoration: none;
-      border-bottom: 1px solid transparent;
-      transition: color .12s, border-color .12s;
-    }
-    .download-alt a:hover { color: #bae6fd; border-color: #bae6fd; }
-    .download-alt .sep { color: #4f6580; user-select: none; }
+    .feedback { background: var(--surface); }
+    .bug-form { display: flex; flex-direction: column; gap: .75rem; max-width: 620px; margin: 1.5rem auto 0; }
+    .bug-row { display: flex; gap: .75rem; }
+    .bug-input, .bug-textarea { flex: 1; width: 100%; font: inherit; font-size: .95rem; padding: .75rem .9rem; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg); }
+    .bug-input:focus, .bug-textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(0,113,227,.25); }
+    .bug-textarea { min-height: 120px; resize: vertical; }
+    .bug-thanks { color: var(--green); font-weight: 600; text-align: center; margin-top: 1rem; }
 
-    .version-note {
-      font-size: .78rem;
-      color: #4f6580;
-      margin-top: .3rem;
-    }
+    footer { padding: 2.5rem 0 3rem; color: var(--muted); font-size: .88rem; }
+    .foot-in { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .foot-in a { color: var(--text-2); }
+    .foot-in a:hover { color: var(--accent); }
 
-    /* ---- Features ---- */
-    .features {
-      padding: 5rem 1.5rem;
-      background: var(--surface);
-    }
-
-    .section-label {
-      text-align: center;
-      font-size: .78rem;
-      font-weight: 700;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--primary);
-      margin-bottom: .75rem;
-    }
-
-    .section-title {
-      text-align: center;
-      font-size: clamp(1.5rem, 3vw, 2rem);
-      font-weight: 800;
-      letter-spacing: -.025em;
-      color: var(--text);
-      margin-bottom: 3rem;
-    }
-
-    .features-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 1.5rem;
-      max-width: 960px;
-      margin: 0 auto;
-    }
-
-    .feature-card {
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 1.75rem 1.5rem;
-      transition: box-shadow .15s, transform .15s;
-    }
-    .feature-card:hover {
-      box-shadow: 0 4px 20px rgba(0,0,0,.08);
-      transform: translateY(-2px);
-    }
-
-    .feature-icon {
-      font-size: 1.75rem;
-      margin-bottom: 1rem;
-      display: block;
-    }
-
-    .feature-title {
-      font-size: .98rem;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: .4rem;
-    }
-
-    .feature-desc {
-      font-size: .88rem;
-      color: var(--muted);
-      line-height: 1.55;
-    }
-
-    /* ---- Private note ---- */
-    .private-strip {
-      background: var(--bg);
-      border-top: 1px solid var(--border);
-      padding: 2.5rem 1.5rem;
-      text-align: center;
-    }
-    .private-strip p {
-      max-width: 560px;
-      margin: 0 auto;
-      color: var(--muted);
-      font-size: .92rem;
-      line-height: 1.65;
-    }
-    .private-strip strong { color: var(--text); }
-
-    /* ---- Download Modals ---- */
-    .modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.55);
-      z-index: 999;
-      align-items: center;
-      justify-content: center;
-      padding: 1.5rem;
-    }
+    /* ---- Modals ---- */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); display: none; align-items: center; justify-content: center; padding: 1rem; z-index: 100; }
     .modal-overlay.open { display: flex; }
-    .modal-box {
-      background: var(--surface);
-      border-radius: 16px;
-      max-width: 500px;
-      width: 100%;
-      padding: 2.25rem 2rem 2rem;
-      position: relative;
-      box-shadow: 0 20px 60px rgba(0,0,0,.25);
-      animation: modalIn .18s ease;
-    }
-    @keyframes modalIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-    .modal-close {
-      position: absolute;
-      top: 1rem; right: 1rem;
-      background: none; border: none;
-      font-size: 1.1rem; cursor: pointer;
-      color: var(--muted); line-height: 1;
-      padding: .25rem .4rem;
-      border-radius: 6px;
-      transition: background .12s, color .12s;
-    }
-    .modal-close:hover { background: var(--bg); color: var(--text); }
-    .modal-icon { font-size: 2rem; margin-bottom: .75rem; }
-    .modal-title {
-      font-size: 1.2rem; font-weight: 800;
-      color: var(--text); margin-bottom: .5rem;
-    }
-    .modal-intro { color: var(--muted); font-size: .9rem; margin-bottom: 1.25rem; }
-    .modal-steps { list-style: none; display: flex; flex-direction: column; gap: .75rem; margin-bottom: 1.75rem; }
-    .modal-steps li {
-      display: flex; gap: .75rem; align-items: flex-start;
-      font-size: .88rem; color: var(--text); line-height: 1.55;
-    }
-    .step-num {
-      background: #dbeafe; color: #1e40af;
-      font-weight: 700; font-size: .75rem;
-      width: 22px; height: 22px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; margin-top: .05rem;
-    }
-    .modal-safe {
-      font-size: .8rem; color: var(--muted);
-      background: var(--bg); border-radius: 8px;
-      padding: .6rem .9rem; margin-bottom: 1.5rem;
-      border: 1px solid var(--border);
-    }
-    .modal-safe a { color: var(--primary); text-decoration: none; }
-    .modal-safe a:hover { text-decoration: underline; }
-    .modal-actions { display: flex; gap: .75rem; justify-content: flex-end; }
-    .modal-btn-secondary {
-      padding: .55rem 1.1rem; border-radius: 8px;
-      border: 1px solid var(--border); background: none;
-      color: var(--muted); font-size: .88rem; cursor: pointer;
-      transition: background .12s;
-    }
-    .modal-btn-secondary:hover { background: var(--bg); }
-    .modal-btn-primary {
-      padding: .55rem 1.4rem; border-radius: 8px;
-      background: var(--primary); color: #fff;
-      border: none; font-size: .88rem; font-weight: 700;
-      cursor: pointer; transition: background .15s;
-      text-decoration: none; display: inline-flex; align-items: center; gap: .4rem;
-    }
-    .modal-btn-primary:hover { background: var(--primary-h); }
+    .modal-box { background: var(--surface); border-radius: 18px; max-width: 520px; width: 100%; padding: 2rem; position: relative; box-shadow: var(--shadow-3); }
+    .modal-close { position: absolute; top: .9rem; right: .9rem; width: 30px; height: 30px; border-radius: 50%; border: none; background: var(--surface-2); cursor: pointer; font-size: .9rem; }
+    .modal-title { font-size: 1.25rem; font-weight: 800; letter-spacing: -.02em; margin-bottom: .5rem; }
+    .modal-intro { color: var(--muted); font-size: .95rem; margin-bottom: 1.1rem; }
+    .modal-steps { list-style: none; display: flex; flex-direction: column; gap: .7rem; margin-bottom: 1.2rem; font-size: .95rem; }
+    .modal-steps li { display: flex; gap: .75rem; align-items: flex-start; }
+    .step-num { flex: 0 0 24px; height: 24px; border-radius: 50%; background: var(--accent); color: #fff; font-size: .78rem; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; margin-top: .1rem; }
+    .modal-safe { font-size: .85rem; color: var(--muted); margin-bottom: 1.25rem; }
+    .modal-safe a { color: var(--accent); }
+    .modal-actions { display: flex; gap: .6rem; justify-content: flex-end; }
 
-    /* ---- Bug Report ---- */
-    .bug-section {
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      padding: 4.5rem 1.5rem;
-      text-align: center;
+    @media (max-width: 960px) {
+      .steps, .privacy-grid { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: repeat(2, 1fr); }
+      .feature, .feature.flip { grid-template-columns: 1fr; gap: 1.75rem; }
+      .feature.flip .feature-text { order: 0; }
+      .nav-links { display: none; }
     }
-    .bug-inner { max-width: 560px; margin: 0 auto; }
-    .bug-sub { color: var(--muted); font-size: .93rem; margin-bottom: 2rem; }
-    .bug-form { display: flex; flex-direction: column; gap: .75rem; text-align: left; }
-    .bug-row { display: flex; gap: .75rem; flex-wrap: wrap; }
-    .bug-input, .bug-textarea {
-      width: 100%;
-      padding: .65rem .9rem;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      font-family: inherit;
-      font-size: .9rem;
-      color: var(--text);
-      background: var(--bg);
-      transition: border-color .15s;
-      outline: none;
-    }
-    .bug-row .bug-input { flex: 1; min-width: 160px; }
-    .bug-input:focus, .bug-textarea:focus { border-color: var(--primary); }
-    .bug-textarea { min-height: 110px; resize: vertical; }
-    .bug-submit {
-      align-self: flex-end;
-      padding: .6rem 1.6rem;
-      background: var(--primary);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: .9rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background .15s;
-    }
-    .bug-submit:hover { background: var(--primary-h); }
-    .bug-thanks { color: var(--primary); font-weight: 600; margin-top: 1rem; }
-
-    /* ---- Footer ---- */
-    footer {
-      background: var(--brand-d);
-      color: #64748b;
-      text-align: center;
-      padding: 2rem 1.5rem;
-      font-size: .82rem;
-    }
-    footer a { color: #7dd3fc; text-decoration: none; }
-    footer a:hover { text-decoration: underline; }
-
     @media (max-width: 600px) {
-      .hero { padding: 3.5rem 1rem 3rem; }
-      .features { padding: 3.5rem 1rem; }
+      body { font-size: 16px; }
+      .grid { grid-template-columns: 1fr; }
+      .bug-row { flex-direction: column; }
+      section { padding: 3.5rem 0; }
+      .hero { padding-top: 3.5rem; }
     }
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .btn, .cell { transition: none; } }
   </style>
 </head>
 <body>
 
-<section class="hero">
-  <div class="hero-wordmark">
-    <img src="prism-logo.png" alt="Prism" style="width:420px;max-width:85vw" />
+<nav class="nav">
+  <div class="wrap nav-in">
+    <a class="nav-brand" href="#top"><img src="prism-logo.png" alt="Prism" /></a>
+    <div class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#faq">FAQ</a>
+    </div>
+    <div class="nav-cta">
+      <a class="btn btn-light btn-sm app-link hidden" href="#">Open Prism</a>
+      <a class="btn btn-primary btn-sm" href="#download">Download</a>
+    </div>
   </div>
+</nav>
 
-  <h1>Your personal finance,<br>finally clear.</h1>
-  <p class="hero-sub">Connect your bank or import statements, see where the money goes, and keep every number on your own computer. No accounts. No cloud. Just clarity.</p>
-
-  <div class="download-wrap">
-    <div id="primary-download">
-      <!-- Filled in by JS based on platform -->
-      <a class="download-primary" href="#" id="btn-primary">
-        <span class="download-platform-icon" id="btn-icon"></span>
-        <span id="btn-label">Download Prism</span>
-      </a>
+<header class="hero" id="top">
+  <div class="wrap hero-in">
+    <p class="eyebrow">Personal spending · private by design</p>
+    <h1>See where your money goes.<br><em>Keep it to yourself.</em></h1>
+    <p>Prism turns bank sync, statements and receipts into a clean ledger you actually understand — trips, refunds, card due dates, what you're owed — and an assistant you can ask anything about it. On your own computer, or in your browser.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#" id="btn-primary"><span id="btn-label">Download for Mac</span></a>
+      <a class="btn btn-light app-link hidden" href="#">Use it in the browser →</a>
     </div>
-
-    <div class="download-alt" id="alt-links">
-      <!-- Filled in by JS -->
-    </div>
-
-    <p class="version-note" id="version-note"></p>
+    <p class="hero-meta">Free · Mac &amp; Windows · <a href="https://github.com/Hillsonn1/Prism" target="_blank" rel="noopener">Open source</a> <span id="version-note"></span></p>
   </div>
-</section>
+  <div class="hero-shot">
+    <div class="shot"><img src="shots/dashboard.png" width="2560" height="1576" alt="The Prism dashboard: spent so far, safe to spend, what stands out, spending by category" fetchpriority="high" /></div>
+  </div>
+</header>
+<div class="after-hero"></div>
 
-<section class="features">
-  <p class="section-label">Everything you need</p>
-  <h2 class="section-title">Finance tracking that works for you</h2>
-  <div class="features-grid">
-    <div class="feature-card">
-      <span class="feature-icon">📂</span>
-      <p class="feature-title">Bank sync or statements</p>
-      <p class="feature-desc">Connect a bank through Plaid and purchases arrive on their own, or import CSV and PDF statements from any card. Duplicates are caught either way.</p>
-    </div>
-    <div class="feature-card">
-      <span class="feature-icon">📊</span>
-      <p class="feature-title">Categorized on its own</p>
-      <p class="feature-desc">Hundreds of built-in rules for US and Israeli merchants, plus a memory of your own choices, sort transactions without any setup or API key.</p>
-    </div>
-    <div class="feature-card">
-      <span class="feature-icon">✦</span>
-      <p class="feature-title">Dollars and shekels</p>
-      <p class="feature-desc">Purchases made in ₪ keep their original amount next to the dollar figure, converted at the day's rate. Optional Claude AI handles the merchants nothing else recognizes.</p>
-    </div>
-    <div class="feature-card">
-      <span class="feature-icon">💰</span>
-      <p class="feature-title">Budget tracking</p>
-      <p class="feature-desc">Set monthly limits per category, track income and fixed expenses, and see exactly how much headroom you have left.</p>
+<section id="how">
+  <div class="wrap">
+    <p class="eyebrow">How it works</p>
+    <h2 class="title">Three things, and the ledger takes care of itself.</h2>
+    <div class="steps">
+      <div class="step"><span class="step-n">1</span><h3>Bring the purchases in</h3><p>Connect a card through Plaid and new purchases arrive on their own. Or drop in a CSV, a PDF statement, a screenshot of your banking app, or a photo of a receipt.</p></div>
+      <div class="step"><span class="step-n">2</span><h3>Prism sorts them</h3><p>Hundreds of rules for US and Israeli merchants, a memory of your choices, logos, refund matching, and a merchant-intelligence pass for the long tail — categorized on their own.</p></div>
+      <div class="step"><span class="step-n">3</span><h3>Ask anything</h3><p>"How much did I spend on food in Tel Aviv?" "Tag last week's Bangkok purchases as Thailand." Answers come from your data, and changes wait for your click.</p></div>
     </div>
   </div>
 </section>
 
-<div class="private-strip">
-  <p><strong>Completely private.</strong> Prism runs entirely on your Mac or Windows PC. Your financial data never leaves your device — there are no servers, no accounts, and no subscription fees.</p>
-</div>
+<section id="features" style="padding-top:1rem">
+  <div class="wrap">
+    <div class="feature f-ask">
+      <div class="feature-text">
+        <p class="eyebrow" style="color:var(--violet)">Ask Prism</p>
+        <h3>Ask in plain English. Get numbers, not vibes.</h3>
+        <p>Claude answers over your own ledger with tools — totals, comparisons, a merchant's history, what's due on your cards. When you ask it to change something, it drafts the change and you apply it.</p>
+        <ul class="feature-list">
+          <li>Every figure comes from a query on your data, never from memory</li>
+          <li>Tagging, categorizing, excluding and trips arrive as proposals with a preview</li>
+          <li>Only what's needed for the question leaves your machine</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="shots/ask.png" width="2560" height="1576" loading="lazy" alt="Ask Prism answering a question about food spending and proposing to tag purchases" /></div>
+    </div>
 
-<!-- Windows download modal -->
-<div class="modal-overlay" id="modal-windows">
-  <div class="modal-box">
-    <button class="modal-close" onclick="closeModal()" aria-label="Close">&#x2715;</button>
-    <div class="modal-icon">🪟</div>
-    <p class="modal-title">Before you download on Windows</p>
-    <p class="modal-intro">Windows and your browser may flag Prism as unrecognized. This is normal for new apps that haven't built up a download history yet — not a sign that anything is wrong.</p>
-    <ul class="modal-steps">
-      <li>
-        <span class="step-num">1</span>
-        <span><strong>Browser warning:</strong> If you see "This file may be harmful", click the <strong>⋮ menu</strong> next to the file → <strong>Keep</strong> or <strong>Keep anyway</strong>.</span>
-      </li>
-      <li>
-        <span class="step-num">2</span>
-        <span><strong>Windows SmartScreen:</strong> If a blue screen appears saying "Windows protected your PC", click <strong>More info</strong> → <strong>Run anyway</strong>.</span>
-      </li>
-      <li>
-        <span class="step-num">3</span>
-        <span>Install normally — Prism will appear in your Start menu and desktop.</span>
-      </li>
-    </ul>
-    <p class="modal-safe">🔒 Prism is fully open source. You can <a href="https://github.com/Hillsonn1/Prism" target="_blank">read every line of code on GitHub</a>.</p>
-    <div class="modal-actions">
-      <button class="modal-btn-secondary" onclick="closeModal()">Cancel</button>
-      <a class="modal-btn-primary" id="win-download-btn" href="#">&#8595; Continue to Download</a>
+    <div class="feature flip">
+      <div class="feature-text">
+        <p class="eyebrow">The ledger</p>
+        <h3>A transaction list that reads like a receipt, not a spreadsheet.</h3>
+        <p>Grouped by day with daily totals, merchant logos, categories with icons, tags, and a raw view of exactly how each charge appeared on your statement.</p>
+        <ul class="feature-list">
+          <li>Refunds linked to the purchase they reverse — automatically when it's clear</li>
+          <li>Purchases for someone else, or money you're owed, stay out of your totals</li>
+          <li>Quick chips for uncategorized, pending, refunds and big purchases</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="shots/transactions.png" width="2560" height="1576" loading="lazy" alt="The Prism transaction list grouped by day" /></div>
+    </div>
+
+    <div class="feature f-trips">
+      <div class="feature-text">
+        <p class="eyebrow" style="color:var(--green)">Trips, bills, and what's coming</p>
+        <h3>Know what a trip really cost. Know what's due before it's due.</h3>
+        <p>A trip is a tag plus two dates: the total, per-day average and category split write themselves. Cards pull their statement balances and due dates, and safe-to-spend tells you what's left of the month.</p>
+        <ul class="feature-list">
+          <li>Shekel, baht and euro purchases keep their original figure next to the dollars</li>
+          <li>Subscriptions detected from their rhythm, with price changes flagged</li>
+          <li>Budgets per category, income and fixed expenses, on-pace projections</li>
+        </ul>
+      </div>
+      <div class="shot"><img src="shots/trips.png" width="2560" height="1576" loading="lazy" alt="A trip report in Prism: total, per day, and where the money went" /></div>
     </div>
   </div>
-</div>
+</section>
 
-<!-- Mac download modal -->
-<div class="modal-overlay" id="modal-mac">
-  <div class="modal-box">
-    <button class="modal-close" onclick="closeModal()" aria-label="Close">&#x2715;</button>
-    <div class="modal-icon"></div>
-    <p class="modal-title">Installing Prism on Mac</p>
-    <p class="modal-intro">Since Prism isn't distributed through the App Store, macOS will ask you to confirm it's safe to open. Here's how to install it in a few steps.</p>
-    <ul class="modal-steps">
-      <li>
-        <span class="step-num">1</span>
-        <span><strong>Download and unzip</strong> the file. Double-click the .zip and a <strong>Prism.app</strong> file will appear.</span>
-      </li>
-      <li>
-        <span class="step-num">2</span>
-        <span><strong>Drag Prism.app</strong> to your <strong>Applications</strong> folder.</span>
-      </li>
-      <li>
-        <span class="step-num">3</span>
-        <span><strong>Right-click</strong> Prism.app → click <strong>Open</strong> → click <strong>Open</strong> again in the dialog. You only need to do this the first time.</span>
-      </li>
-      <li>
-        <span class="step-num">4</span>
-        <span>If you don't see the Open option: go to <strong>System Settings → Privacy &amp; Security</strong> and click <strong>Open Anyway</strong> next to Prism.</span>
-      </li>
-    </ul>
-    <p class="modal-safe">🔒 Prism is fully open source. You can <a href="https://github.com/Hillsonn1/Prism" target="_blank">read every line of code on GitHub</a>.</p>
-    <div class="modal-actions">
-      <button class="modal-btn-secondary" onclick="closeModal()">Cancel</button>
-      <a class="modal-btn-primary" id="mac-download-btn" href="#">&#8595; Continue to Download</a>
+<section style="padding-top:0">
+  <div class="wrap">
+    <p class="eyebrow">And the rest</p>
+    <h2 class="title">Small things, done properly.</h2>
+    <div class="grid">
+      <div class="cell"><span class="cell-icon" style="background:#0071e3"><svg viewBox="0 0 24 24"><line x1="3" y1="22" x2="21" y2="22"/><line x1="6" y1="18" x2="6" y2="11"/><line x1="10" y1="18" x2="10" y2="11"/><line x1="14" y1="18" x2="14" y2="11"/><line x1="18" y1="18" x2="18" y2="11"/><polygon points="12 2 20 7 4 7"/></svg></span><h4>Bank sync</h4><p>Your own Plaid keys, checked every 15 minutes. Pending charges settle in place.</p></div>
+      <div class="cell"><span class="cell-icon" style="background:#5e5ce6"><svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg></span><h4>Statements read by AI</h4><p>PDFs, app screenshots and receipt photos become rows. A receipt can be split by category.</p></div>
+      <div class="cell"><span class="cell-icon" style="background:#ff9500"><svg viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L2 12V2h10l8.6 8.6a2 2 0 0 1 0 2.8Z"/><circle cx="7" cy="7" r="1.5"/></svg></span><h4>Categories you shape</h4><p>Colors, icons, your own categories, merge or hide the ones you don't use.</p></div>
+      <div class="cell"><span class="cell-icon" style="background:#34c759"><svg viewBox="0 0 24 24"><path d="M20 12V7H6a2 2 0 0 1 0-4h13v4"/><path d="M4 5v14a2 2 0 0 0 2 2h14v-5"/><path d="M17 12a2 2 0 0 0 0 4h4v-4Z"/></svg></span><h4>Budgets that add up</h4><p>Income, fixed expenses, a monthly target and per-category limits — with a per-day safe-to-spend.</p></div>
+      <div class="cell"><span class="cell-icon" style="background:#ff2d55"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span><h4>Cards &amp; due dates</h4><p>Statement balances, minimum payments and due dates for each card, straight from the bank.</p></div>
+      <div class="cell"><span class="cell-icon" style="background:#32ade6"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><h4>Built for two countries</h4><p>US and Israeli merchants recognized out of the box; transliterated names get their Hebrew and meaning.</p></div>
+      <div class="cell"><span class="cell-icon" style="background:#1d1d1f"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></span><h4>Light and dark</h4><p>Follows your system, or pick one. Designed to feel at home on a Mac.</p></div>
+      <div class="cell"><span class="cell-icon" style="background:#8e8e93"><svg viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8"/></svg></span><h4>Keyboard-first</h4><p>⌘K to ask, / to search, N for a new purchase, arrows to change month. Undo instead of "are you sure?".</p></div>
     </div>
   </div>
-</div>
+</section>
 
-<section class="bug-section">
-  <div class="bug-inner">
-    <p class="section-label">Feedback</p>
-    <h2 class="section-title" style="margin-bottom:.75rem">Found a bug?</h2>
-    <p class="bug-sub">Let us know and we'll fix it in the next update.</p>
+<section class="privacy" id="privacy">
+  <div class="wrap">
+    <p class="eyebrow">Privacy</p>
+    <h2 class="title">Your data stays yours.</h2>
+    <p class="lead" style="margin-top:.75rem">Prism was built for one person's own money first, and it shows: there's no account to create for the desktop app, no analytics, and nothing phones home.</p>
+    <div class="privacy-grid">
+      <div class="privacy-card"><h4>On your computer</h4><p>The desktop app keeps everything in a folder on your Mac or PC, with daily backups. Bank tokens and API keys sit in the OS keychain.</p></div>
+      <div class="privacy-card"><h4>Or in your browser, still yours</h4><p>The hosted version gives every account its own data folder and seals your keys with a server secret. Same app, same rules.</p></div>
+      <div class="privacy-card"><h4>Your keys, your calls</h4><p>Bank sync uses your own Plaid keys and the assistant your own Anthropic key — only what a question needs is sent, never the whole ledger. And <a href="https://github.com/Hillsonn1/Prism" target="_blank" rel="noopener">every line is open source</a>.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="download" id="download">
+  <div class="wrap">
+    <p class="eyebrow">Get Prism</p>
+    <h2 class="title">Free, and ready in a minute.</h2>
+    <div class="dl-buttons">
+      <a class="btn btn-primary" href="#" onclick="event.preventDefault();openModal('mac')"> Download for Mac</a>
+      <a class="btn btn-secondary" href="#" onclick="event.preventDefault();openModal('windows')">🪟 Download for Windows</a>
+    </div>
+    <p class="dl-note" id="dl-version">Apple silicon Macs · Windows 10 and up</p>
+    <div class="dl-web app-link hidden">
+      <p>Prefer not to install anything?</p>
+      <a class="btn btn-secondary app-link" href="#">Use Prism in your browser →</a>
+    </div>
+  </div>
+</section>
+
+<section id="faq" style="padding-top:0">
+  <div class="wrap">
+    <p class="eyebrow" style="text-align:center">Questions</p>
+    <h2 class="title" style="text-align:center">Good to know</h2>
+    <div class="faq">
+      <details><summary>Is it really free?</summary><p>Yes. Prism is open source and there's no subscription. Bank sync uses a free Plaid developer account (your own keys), and the assistant uses your own Anthropic API key, which costs cents for a month of normal use — the app shows you the running total.</p></details>
+      <details><summary>Which banks work?</summary><p>Bank sync covers US banks and cards through Plaid. Anything else — including Israeli banks and cards — comes in through statements: CSV, PDF, or a screenshot of the banking app read by Claude.</p></details>
+      <details><summary>Do I need an API key?</summary><p>No. Everything core works without one: sync, statements, categorization, budgets, trips, refunds. A key adds Ask Prism, reading screenshots and receipts, learning unfamiliar merchants, a category review with reasons, and "explain this charge".</p></details>
+      <details><summary>What's the difference between the desktop app and the browser version?</summary><p>They're the same app. The desktop app keeps your data in a folder on your computer with no account at all. The browser version needs an account and keeps your data in your own folder on the server, with keys sealed by the server's secret.</p></details>
+      <details><summary>Windows says the download is unrecognized. Is it safe?</summary><p>Prism isn't code-signed yet, so SmartScreen shows a warning on new apps. Click "More info" then "Run anyway". You can read the whole source on GitHub.</p></details>
+      <details><summary>Where does my data live, and can I take it with me?</summary><p>In plain JSON files in the app's data folder (Settings → About opens it), with daily backups. Export any view to CSV at any time.</p></details>
+    </div>
+  </div>
+</section>
+
+<section class="feedback">
+  <div class="wrap">
+    <p class="eyebrow" style="text-align:center">Feedback</p>
+    <h2 class="title" style="text-align:center">Found a bug? Missing something?</h2>
     <form name="bug-report" method="POST" data-netlify="true" netlify-honeypot="bot-field" class="bug-form" id="bug-form">
       <input type="hidden" name="form-name" value="bug-report" />
       <p style="display:none"><input name="bot-field" /></p>
@@ -464,111 +336,97 @@
         <input type="text" name="name" placeholder="Your name (optional)" class="bug-input" />
         <input type="email" name="email" placeholder="Email for follow-up (optional)" class="bug-input" />
       </div>
-      <textarea name="description" placeholder="Describe what happened…" class="bug-textarea" required></textarea>
-      <button type="submit" class="bug-submit">Send report</button>
+      <textarea name="description" placeholder="What happened, or what would make Prism better?" class="bug-textarea" required></textarea>
+      <button type="submit" class="btn btn-primary">Send</button>
     </form>
-    <p class="bug-thanks" id="bug-thanks" style="display:none">Thanks — we got it. ✓</p>
+    <p class="bug-thanks" id="bug-thanks" style="display:none">Thanks — got it. ✓</p>
   </div>
 </section>
 
 <footer>
-  <p>Prism &mdash; personal finance tracker &nbsp;&middot;&nbsp; <a href="https://github.com/Hillsonn1/Prism" id="footer-repo-link">GitHub</a></p>
+  <div class="wrap foot-in">
+    <span>Prism <span id="foot-version"></span> · Made in Jerusalem</span>
+    <span><a href="https://github.com/Hillsonn1/Prism" target="_blank" rel="noopener">GitHub</a> · <a href="#privacy">Privacy</a> · <a href="#faq">FAQ</a></span>
+  </div>
 </footer>
 
-<script>
-  // ---- Configuration ----
-  // TODO: Replace with your actual GitHub username and repo name
-  const GITHUB_REPO = 'Hillsonn1/Prism';
-  const BASE_URL    = `https://github.com/${GITHUB_REPO}/releases/latest/download`;
+<!-- Windows install notes -->
+<div class="modal-overlay" id="modal-windows">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+    <p class="modal-title">Installing on Windows</p>
+    <p class="modal-intro">Windows may flag Prism as unrecognized — normal for a new app that isn't code-signed yet.</p>
+    <ul class="modal-steps">
+      <li><span class="step-num">1</span><span>If the browser says "this file may be harmful", open its menu and choose <strong>Keep</strong>.</span></li>
+      <li><span class="step-num">2</span><span>If SmartScreen appears, click <strong>More info</strong>, then <strong>Run anyway</strong>.</span></li>
+      <li><span class="step-num">3</span><span>Install normally — Prism appears in the Start menu.</span></li>
+    </ul>
+    <p class="modal-safe">🔒 Fully open source — <a href="https://github.com/Hillsonn1/Prism" target="_blank" rel="noopener">read every line</a>.</p>
+    <div class="modal-actions"><button class="btn btn-secondary btn-sm" onclick="closeModal()">Cancel</button><a class="btn btn-primary btn-sm" id="win-download-btn" href="#">↓ Download</a></div>
+  </div>
+</div>
 
+<!-- Mac install notes -->
+<div class="modal-overlay" id="modal-mac">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
+    <p class="modal-title">Installing on Mac</p>
+    <p class="modal-intro">Prism isn't in the App Store, so macOS asks you to confirm the first open.</p>
+    <ul class="modal-steps">
+      <li><span class="step-num">1</span><span><strong>Unzip</strong> the download and drag <strong>Prism.app</strong> to Applications.</span></li>
+      <li><span class="step-num">2</span><span><strong>Right-click</strong> Prism → <strong>Open</strong> → <strong>Open</strong> again. Only needed once.</span></li>
+      <li><span class="step-num">3</span><span>If there's no Open option: System Settings → Privacy &amp; Security → <strong>Open Anyway</strong>.</span></li>
+    </ul>
+    <p class="modal-safe">🔒 Fully open source — <a href="https://github.com/Hillsonn1/Prism" target="_blank" rel="noopener">read every line</a>.</p>
+    <div class="modal-actions"><button class="btn btn-secondary btn-sm" onclick="closeModal()">Cancel</button><a class="btn btn-primary btn-sm" id="mac-download-btn" href="#">↓ Download</a></div>
+  </div>
+</div>
+
+<script>
+  const GITHUB_REPO = 'Hillsonn1/Prism';
+  const BASE_URL = `https://github.com/${GITHUB_REPO}/releases/latest/download`;
   const DOWNLOADS = {
-    windows: { url: `${BASE_URL}/Prism-Setup.exe`,  label: 'Download for Windows',     icon: '🪟' },
-    mac:     { url: `${BASE_URL}/Prism-mac-arm64.zip`, label: 'Download for Mac', icon: '' },
+    windows: { url: `${BASE_URL}/Prism-Setup.exe`, label: 'Download for Windows' },
+    mac: { url: `${BASE_URL}/Prism-mac-arm64.zip`, label: 'Download for Mac' },
   };
 
   function openModal(platform) {
-    const url = DOWNLOADS[platform].url;
-    if (platform === 'windows') {
-      document.getElementById('win-download-btn').href = url;
-      document.getElementById('modal-windows').classList.add('open');
-    } else {
-      document.getElementById('mac-download-btn').href = url;
-      document.getElementById('modal-mac').classList.add('open');
-    }
+    document.getElementById(platform === 'windows' ? 'win-download-btn' : 'mac-download-btn').href = DOWNLOADS[platform].url;
+    document.getElementById(platform === 'windows' ? 'modal-windows' : 'modal-mac').classList.add('open');
     document.body.style.overflow = 'hidden';
   }
-
   function closeModal() {
     document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('open'));
     document.body.style.overflow = '';
   }
-
-  // Close on backdrop click
-  document.querySelectorAll('.modal-overlay').forEach(m => {
-    m.addEventListener('click', e => { if (e.target === m) closeModal(); });
-  });
-
-  // Close on Escape
+  document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if (e.target === m) closeModal(); }));
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 
-  function setPrimary(primaryKey, altKeys) {
-    const primary = DOWNLOADS[primaryKey];
-    const btn   = document.getElementById('btn-primary');
-    const icon  = document.getElementById('btn-icon');
-    const label = document.getElementById('btn-label');
-    if (btn && primary) {
-      btn.removeAttribute('href');
-      btn.style.cursor = 'pointer';
-      btn.onclick = e => { e.preventDefault(); openModal(primaryKey); };
-      if (icon)  icon.textContent  = primary.icon;
-      if (label) label.textContent = primary.label;
-    }
-    const altWrap = document.getElementById('alt-links');
-    if (altWrap) {
-      altWrap.innerHTML = altKeys.map((k, i) => {
-        const d = DOWNLOADS[k];
-        return (i > 0 ? '<span class="sep">&middot;</span>' : '') +
-          `<a href="#" onclick="event.preventDefault();openModal('${k}')">${d.icon} ${d.label}</a>`;
-      }).join('');
-    }
-  }
+  (function init() {
+    const isMac = (navigator.platform || '').toLowerCase().startsWith('mac') || /Macintosh/.test(navigator.userAgent);
+    const primary = isMac ? 'mac' : 'windows';
+    const btn = document.getElementById('btn-primary');
+    document.getElementById('btn-label').textContent = (isMac ? ' ' : '🪟 ') + DOWNLOADS[primary].label;
+    btn.onclick = e => { e.preventDefault(); openModal(primary); };
 
-  function init() {
-    const footerLink = document.getElementById('footer-repo-link');
-    if (footerLink) footerLink.href = `https://github.com/${GITHUB_REPO}`;
+    // The hosted version, when there is one (site/config.js is written by the deploy)
+    const appUrl = window.PRISM_APP_URL;
+    if (appUrl) document.querySelectorAll('.app-link').forEach(el => { el.classList.remove('hidden'); if (el.tagName === 'A') el.href = appUrl; });
 
-    const ua   = navigator.userAgent || '';
-    const plat = (navigator.platform || '').toLowerCase();
-    const isMac = plat.startsWith('mac') || ua.includes('Macintosh');
-    if (isMac) {
-      setPrimary('mac', ['windows']);
-    } else {
-      setPrimary('windows', ['mac']);
-    }
+    fetch('/version.json', { cache: 'no-store' }).then(r => r.json()).then(d => {
+      if (!d.version) return;
+      document.getElementById('version-note').textContent = `· v${d.version}`;
+      document.getElementById('foot-version').textContent = `v${d.version}`;
+    }).catch(() => {});
+  })();
 
-    fetch('/version.json', { cache: 'no-store' })
-      .then(r => r.json())
-      .then(data => {
-        const note = document.getElementById('version-note');
-        if (note && data.version) note.textContent = `Latest version: v${data.version}`;
-      })
-      .catch(() => {});
-  }
-
-  init();
-
-  // Bug form — show inline thanks instead of redirecting
   const bugForm = document.getElementById('bug-form');
-  if (bugForm) {
-    bugForm.addEventListener('submit', async e => {
-      e.preventDefault();
-      const data = new FormData(bugForm);
-      await fetch('/', { method: 'POST', body: data });
-      bugForm.style.display = 'none';
-      document.getElementById('bug-thanks').style.display = 'block';
-    });
-  }
+  if (bugForm) bugForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    await fetch('/', { method: 'POST', body: new FormData(bugForm) }).catch(() => {});
+    bugForm.style.display = 'none';
+    document.getElementById('bug-thanks').style.display = 'block';
+  });
 </script>
-
 </body>
 </html>

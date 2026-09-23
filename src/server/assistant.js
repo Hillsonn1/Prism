@@ -10,6 +10,7 @@ const { isCounted } = require('./spend');
 const { getCategories } = require('./categoryConfig');
 const { recurringCharges } = require('./insights');
 const trips = require('./trips');
+const { currentUser } = require('./tenancy');
 
 const CONVERSATION_TTL = 2 * 60 * 60 * 1000;
 const PROPOSAL_TTL = 60 * 60 * 1000;
@@ -240,7 +241,7 @@ How to work:
         if (!rows.length) return JSON.stringify({ error: 'No transactions match that selection' });
         if (rows.length > 500) return JSON.stringify({ error: `${rows.length} rows is too many for one change; narrow the selection` });
         const p = { id: crypto.randomUUID(), kind: 'update', summary, ids: rows.map(t => t.id), set, affected: rows.length, preview: rows.slice(0, 8).map(compactRow), createdAt: Date.now() };
-        proposals.set(p.id, p);
+        proposals.set(scoped(p.id), p);
         emit({ type: 'proposal', proposal: publicProposal(p) });
         return JSON.stringify({ proposalId: p.id, affected: rows.length, status: 'waiting for the user to apply' });
       },
@@ -256,7 +257,7 @@ How to work:
         const exists = all().some(t => t.merchant === merchant);
         if (!exists) return JSON.stringify({ error: `No merchant named exactly "${merchant}"` });
         const p = { id: crypto.randomUUID(), kind: 'merchant_category', summary: `${merchant} → ${category}${applyToAll ? ' (all purchases)' : ''}`, merchant, category, applyToAll: Boolean(applyToAll), affected: rows.length, preview: rows.slice(0, 5).map(compactRow), createdAt: Date.now() };
-        proposals.set(p.id, p);
+        proposals.set(scoped(p.id), p);
         emit({ type: 'proposal', proposal: publicProposal(p) });
         return JSON.stringify({ proposalId: p.id, affected: rows.length, status: 'waiting for the user to apply' });
       },
@@ -270,7 +271,7 @@ How to work:
         if (trips.listTrips(store).some(t => t.name.toLowerCase() === name.toLowerCase())) return JSON.stringify({ error: `There is already a trip called "${name}"` });
         const rows = all().filter(t => t.date >= start && t.date <= end);
         const p = { id: crypto.randomUUID(), kind: 'trip', summary: `Trip "${name}", ${start} to ${end}`, name, start, end, includeAll: Boolean(includeAll), affected: rows.length, preview: rows.slice(0, 5).map(compactRow), createdAt: Date.now() };
-        proposals.set(p.id, p);
+        proposals.set(scoped(p.id), p);
         emit({ type: 'proposal', proposal: publicProposal(p) });
         return JSON.stringify({ proposalId: p.id, purchasesInRange: rows.length, status: 'waiting for the user to apply' });
       },
@@ -282,11 +283,14 @@ How to work:
   const publicProposal = p => ({ id: p.id, kind: p.kind, summary: p.summary, affected: p.affected, preview: p.preview, set: p.set || null, applied: Boolean(p.applied) });
 
   // ---- Conversation ----
+  // Keys carry the user so one person's conversation is never another's
+  const scoped = id => `${currentUser() || 'local'}:${id}`;
+
   async function ask({ conversationId, question }, emit) {
     sweep();
-    const id = conversationId && conversations.has(conversationId) ? conversationId : crypto.randomUUID();
-    const conv = conversations.get(id) || { messages: [], updatedAt: Date.now() };
-    conversations.set(id, conv);
+    const id = conversationId && conversations.has(scoped(conversationId)) ? conversationId : crypto.randomUUID();
+    const conv = conversations.get(scoped(id)) || { messages: [], updatedAt: Date.now() };
+    conversations.set(scoped(id), conv);
     conv.messages.push({ role: 'user', content: question });
     if (conv.messages.length > MAX_HISTORY) conv.messages.splice(0, conv.messages.length - MAX_HISTORY);
     // History must start with a user turn and never open on a tool result
@@ -325,7 +329,7 @@ How to work:
   }
 
   function applyProposal(id) {
-    const p = proposals.get(id);
+    const p = proposals.get(scoped(id));
     if (!p) throw Object.assign(new Error('That proposal has expired — ask again'), { status: 404 });
     if (p.applied) return { applied: true, affected: p.affected };
     let affected = 0;
@@ -361,7 +365,7 @@ How to work:
     return { applied: true, affected };
   }
 
-  function reset(conversationId) { conversations.delete(conversationId); }
+  function reset(conversationId) { conversations.delete(scoped(conversationId)); }
 
   return { ask, applyProposal, reset, tools: makeTools, proposals };
 }

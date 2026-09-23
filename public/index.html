@@ -37,6 +37,7 @@
       <div class="sidebar-footer">
         <button class="sidebar-ask" onclick="toggleAsk()" title="Ask Prism (⌘K)"><span data-icon="sparkle"></span><span>Ask Prism</span><kbd>⌘K</kbd></button>
         <div id="sidebar-footer"></div>
+        <div id="sidebar-account" class="sidebar-account"></div>
         <div class="sidebar-version" id="sidebar-version"></div>
       </div>
     </aside>
@@ -62,7 +63,7 @@
               <button class="btn btn-secondary" onclick="switchView('settings')">Connect a bank</button>
             </div>
             <p class="empty-hint">
-              Everything works offline. Features marked <span class="ai-badge">AI</span> are optional extras that need an Anthropic API key.
+              Everything works on its own. Features marked <span class="ai-badge">AI</span> are optional extras that need an Anthropic API key.
             </p>
           </div>
           <div id="dashboard-data" style="display:none">
@@ -313,6 +314,21 @@
               In Sandbox, pick any bank and sign in with <code>user_good</code> / <code>pass_good</code>.
               Stored only on your computer, never shared.
             </p>
+          </div>
+        </div>
+
+        <div class="card" id="account-card" data-tab="general" style="display:none">
+          <div class="card-title-row">
+            <h2 class="card-title" style="margin-bottom:0">Account</h2>
+            <div id="account-summary"></div>
+          </div>
+          <div class="settings-form">
+            <label class="settings-label">Change password</label>
+            <div class="settings-input-row">
+              <input type="password" id="pw-current" placeholder="Current password" autocomplete="current-password" style="flex:1" />
+              <input type="password" id="pw-next" placeholder="New password (8+ characters)" autocomplete="new-password" style="flex:1" />
+              <button class="btn btn-secondary" onclick="changePassword()">Change</button>
+            </div>
           </div>
         </div>
 

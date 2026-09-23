@@ -21,6 +21,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/write-version.js "$(gh release view --json tagName --jq .tagName)"
 
+      # Where the hosted (browser) version lives, if one is deployed: a repository variable
+      - name: Write site/config.js
+        run: echo "window.PRISM_APP_URL = \"${{ vars.PRISM_APP_URL }}\";" > site/config.js
+
       - name: Install Netlify CLI
         run: npm install -g netlify-cli
 

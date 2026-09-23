@@ -5,6 +5,7 @@ async function api(method, path, body) {
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(path, opts);
   const data = await r.json().catch(() => ({}));
+  if (r.status === 401 && data.signedOut) { location.href = '/login'; throw new Error('Signed out'); }
   if (!r.ok) throw new Error(data.error || 'Request failed');
   return data;
 }
@@ -31,6 +32,7 @@ function applySettings(settings) {
   state.prefs = settings.prefs || {};
   state.currency = settings.currency || { ilsRate: 'auto', latest: null };
   state.dismissedAnomalies = new Set(state.prefs.dismissedAnomalies || []);
+  state.hosted = Boolean(settings.hosted);
   setCategories(settings.categories);
   state.trips = settings.trips || [];
   applyTheme(state.prefs.theme || 'system');

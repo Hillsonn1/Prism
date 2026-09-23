@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in — Prism</title>
+  <link rel="icon" type="image/x-icon" href="/icon.ico" />
+  <script>
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('prism-theme'); } catch (e) {}
+      var dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .auth { min-height: 100vh; display: grid; grid-template-columns: minmax(320px, 46%) 1fr; }
+    .auth-brand { background: var(--sidebar-bg); color: #fff; padding: 3rem; display: flex; flex-direction: column; justify-content: space-between; }
+    .auth-brand img { width: 220px; }
+    .auth-brand h2 { font-size: 1.6rem; font-weight: 700; letter-spacing: -.02em; line-height: 1.25; margin-bottom: .75rem; }
+    .auth-brand p { color: var(--sidebar-muted); line-height: 1.6; max-width: 40ch; }
+    .auth-points { list-style: none; margin-top: 1.5rem; display: flex; flex-direction: column; gap: .55rem; color: var(--sidebar-text); font-size: .92rem; }
+    .auth-points li::before { content: '✓'; color: #7ee2a2; margin-right: .5rem; font-weight: 700; }
+    .auth-foot { font-size: .78rem; color: var(--sidebar-muted); }
+    .auth-foot a { color: var(--sidebar-text); }
+    .auth-main { display: flex; align-items: center; justify-content: center; padding: 2rem; }
+    .auth-card { width: 100%; max-width: 380px; }
+    .auth-card h1 { font-size: 1.5rem; font-weight: 700; letter-spacing: -.02em; margin-bottom: .35rem; }
+    .auth-sub { color: var(--muted); margin-bottom: 1.5rem; }
+    .auth-form { display: flex; flex-direction: column; gap: .85rem; }
+    .auth-form input { width: 100%; }
+    .auth-error { color: var(--danger-text); font-size: .85rem; min-height: 1.2rem; }
+    .auth-switch { margin-top: 1.25rem; font-size: .88rem; color: var(--muted); }
+    .auth-switch button { background: none; border: none; color: var(--accent); font: inherit; font-weight: 600; cursor: pointer; padding: 0; }
+    .btn-block { width: 100%; padding: .7rem 1rem; font-size: .95rem; }
+    @media (max-width: 800px) { .auth { grid-template-columns: 1fr; } .auth-brand { padding: 2rem; } .auth-brand h2, .auth-brand p, .auth-points { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="auth">
+    <aside class="auth-brand">
+      <img src="/prism-logo.png" alt="Prism" />
+      <div>
+        <h2>Know where your money goes.</h2>
+        <p>Bank sync or statements in, a clean ledger out — with an assistant you can ask anything about your spending.</p>
+        <ul class="auth-points">
+          <li>Purchases sorted into categories on their own</li>
+          <li>Trips, tags, refunds and what you're owed</li>
+          <li>Your bank and API keys stay yours</li>
+        </ul>
+      </div>
+      <p class="auth-foot">Prefer to keep everything on your own computer? <a href="https://prismspendtracker.netlify.app">Download the desktop app</a>.</p>
+    </aside>
+    <main class="auth-main">
+      <div class="auth-card">
+        <h1 id="auth-title">Welcome back</h1>
+        <p class="auth-sub" id="auth-sub">Sign in to your Prism account.</p>
+        <form class="auth-form" id="auth-form" autocomplete="on">
+          <div class="edit-field" id="name-field" style="display:none">
+            <label class="edit-label" for="name">Your name</label>
+            <input type="text" id="name" name="name" autocomplete="name" maxlength="80" />
+          </div>
+          <div class="edit-field">
+            <label class="edit-label" for="email">Email</label>
+            <input type="email" id="email" name="email" autocomplete="email" required />
+          </div>
+          <div class="edit-field">
+            <label class="edit-label" for="password">Password</label>
+            <input type="password" id="password" name="password" autocomplete="current-password" required minlength="8" />
+          </div>
+          <div class="auth-error" id="auth-error" role="alert"></div>
+          <button class="btn btn-primary btn-block" type="submit" id="auth-submit">Sign in</button>
+        </form>
+        <p class="auth-switch" id="auth-switch">New to Prism? <button type="button" onclick="setMode('signup')">Create an account</button></p>
+      </div>
+    </main>
+  </div>
+  <script>
+    let mode = new URLSearchParams(location.search).get('mode') === 'signup' ? 'signup' : 'login';
+    function setMode(m) {
+      mode = m;
+      const signup = m === 'signup';
+      document.getElementById('auth-title').textContent = signup ? 'Create your account' : 'Welcome back';
+      document.getElementById('auth-sub').textContent = signup ? 'Free while Prism is in preview.' : 'Sign in to your Prism account.';
+      document.getElementById('name-field').style.display = signup ? '' : 'none';
+      document.getElementById('auth-submit').textContent = signup ? 'Create account' : 'Sign in';
+      document.getElementById('password').autocomplete = signup ? 'new-password' : 'current-password';
+      document.getElementById('auth-switch').innerHTML = signup
+        ? 'Already have an account? <button type="button" onclick="setMode(\'login\')">Sign in</button>'
+        : 'New to Prism? <button type="button" onclick="setMode(\'signup\')">Create an account</button>';
+      document.getElementById('auth-error').textContent = '';
+      document.getElementById(signup ? 'name' : 'email').focus();
+    }
+    document.getElementById('auth-form').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = document.getElementById('auth-submit');
+      const err = document.getElementById('auth-error');
+      btn.disabled = true; err.textContent = '';
+      const body = { email: document.getElementById('email').value, password: document.getElementById('password').value };
+      if (mode === 'signup') body.name = document.getElementById('name').value;
+      try {
+        const res = await fetch(`/api/auth/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Something went wrong');
+        location.href = '/';
+      } catch (ex) {
+        err.textContent = ex.message;
+        btn.disabled = false;
+      }
+    });
+    setMode(mode);
+  </script>
+</body>
+</html>

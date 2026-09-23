@@ -45,6 +45,31 @@ tests/              node:test suites
 site/               the download page (Netlify)
 ```
 
+## Hosting it for several people
+
+The same server runs as a website with accounts when `PRISM_HOSTED=1` and
+`PRISM_SECRET` are set: sign up and sign in at `/login`, every user gets their
+own data folder under `<data dir>/users/<id>/`, and Plaid tokens and API keys
+are sealed with a key derived from `PRISM_SECRET` (the desktop app uses the OS
+keychain instead). Bank sync runs for every user on the same 15-minute cycle.
+
+```bash
+PRISM_SECRET="$(openssl rand -hex 32)" PRISM_DATA_DIR=/srv/prism npm run start:hosted
+```
+
+Put it behind HTTPS (cookies are marked Secure when `NODE_ENV=production`).
+There's a `Dockerfile` and a `fly.toml` for a one-command deploy on Fly.io:
+
+```bash
+fly launch --copy-config --no-deploy
+fly volumes create prism_data --size 1
+fly secrets set PRISM_SECRET="$(openssl rand -hex 32)"
+fly deploy
+```
+
+Point the landing page at it by setting the `PRISM_APP_URL` repository
+variable (the site deploy writes it into `site/config.js`).
+
 ## Releasing
 
 Bump `version` in `package.json`, commit, then tag: `git tag v2.0.0 && git push --tags`. The Release workflow builds the Windows installer and Mac zip, publishes a GitHub release, and deploys `site/` with a matching `version.json` (the workflow refuses a tag that doesn't match `package.json`).

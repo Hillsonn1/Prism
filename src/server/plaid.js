@@ -95,9 +95,11 @@ async function httpRequest(cfg, endpoint, body) {
   return data;
 }
 
-function createPlaid({ store, openExternal = null, log = console, request = httpRequest, secrets = { seal: v => v, open: v => v, available: false }, onChange = null }) {
+function createPlaid({ store, openExternal = null, log = console, request = httpRequest, secrets = { seal: v => v, open: v => v, available: false }, onChange = null, state: sharedState = null, forEachUser = null }) {
   const token = item => secrets.open(item.accessToken);
-  const state = { syncing: false, lastSyncAt: null, lastResult: null, lastChange: null, changeCounter: 0 };
+  // In the hosted version `state` is a per-user proxy handed in by the server
+  const state = sharedState || { syncing: false, lastSyncAt: null, lastResult: null, lastChange: null, changeCounter: 0 };
+  if (state.changeCounter === undefined) Object.assign(state, { syncing: false, lastSyncAt: null, lastResult: null, lastChange: null, changeCounter: 0 });
 
   // Items belong to the environment they were linked in; a Sandbox connection
   // can't sync with Production keys, so it's set aside rather than failing.
@@ -112,7 +114,6 @@ function createPlaid({ store, openExternal = null, log = console, request = http
     return { data, active: cfg ? data.items.filter(i => i.env === cfg.env) : [] };
   }
   const pendingLinks = new Map(); // link_token → { itemId, expiresAt, result }
-  let syncPromise = null;
   const timers = [];
 
   async function post(endpoint, body) {
@@ -320,10 +321,11 @@ function createPlaid({ store, openExternal = null, log = console, request = http
     item.liabilitiesAt = new Date().toISOString();
   }
 
-  // One sync at a time; concurrent callers share the in-flight run.
+  // One sync at a time per user; concurrent callers share the in-flight run.
   function syncItems(itemId = null) {
-    if (syncPromise) return syncPromise;
-    syncPromise = (async () => {
+    if (state.changeCounter === undefined) Object.assign(state, { syncing: false, lastSyncAt: null, lastResult: null, lastChange: null, changeCounter: 0 });
+    if (state._syncPromise) return state._syncPromise;
+    state._syncPromise = (async () => {
       const totals = { added: 0, updated: 0, removed: 0, skipped: 0, errors: 0 };
       const { data, active } = itemsForCurrentEnv();
       const items = active.filter(i => !itemId || i.itemId === itemId);
@@ -360,8 +362,14 @@ function createPlaid({ store, openExternal = null, log = console, request = http
         state.syncing = false;
       }
       return totals;
-    })().finally(() => { syncPromise = null; });
-    return syncPromise;
+    })().finally(() => { state._syncPromise = null; });
+    return state._syncPromise;
+  }
+
+  // Every user's connections, one after another (hosted); just this one otherwise
+  function syncEveryone() {
+    if (!forEachUser) return syncItems().catch(() => {});
+    return forEachUser(() => syncItems().catch(() => {}));
   }
 
   const later = (fn, ms) => { const t = setTimeout(fn, ms); t.unref(); timers.push(t); };
@@ -372,8 +380,8 @@ function createPlaid({ store, openExternal = null, log = console, request = http
   }
 
   function startScheduler() {
-    later(() => syncItems().catch(() => {}), 5000);
-    const t = setInterval(() => syncItems().catch(() => {}), SYNC_INTERVAL_MS);
+    later(() => syncEveryone(), 5000);
+    const t = setInterval(() => syncEveryone(), SYNC_INTERVAL_MS);
     t.unref();
     timers.push(t);
   }
@@ -482,11 +490,11 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       configured: Boolean(cfg),
       env: cfg ? cfg.env : (settings.plaid?.env || 'sandbox'),
       clientId: settings.plaid?.clientId || '',
-      syncing: state.syncing,
-      lastSyncAt: state.lastSyncAt,
-      lastResult: state.lastResult,
-      lastChange: state.lastChange,
-      changeCounter: state.changeCounter,
+      syncing: Boolean(state.syncing),
+      lastSyncAt: state.lastSyncAt || null,
+      lastResult: state.lastResult || null,
+      lastChange: state.lastChange || null,
+      changeCounter: state.changeCounter || 0,
       syncIntervalMinutes: SYNC_INTERVAL_MS / 60000,
       items: itemsForCurrentEnv().data.items.map(publicItem),
     };

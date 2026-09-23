@@ -8,7 +8,7 @@ const path = require('path');
 const { Store } = require('../src/server/storage');
 const { importRows } = require('../src/server/importer');
 
-const dataDir = path.join(__dirname, '..', 'data');
+const dataDir = process.env.PRISM_DATA_DIR || path.join(__dirname, '..', 'data');
 fs.rmSync(dataDir, { recursive: true, force: true });
 fs.mkdirSync(dataDir, { recursive: true });
 const store = new Store(dataDir);
@@ -65,6 +65,18 @@ store.write('expenses', { _recurring: [{ id: 'exp-1', label: 'Rent', amount: 185
     const converted = ilRows.map(r => ({ ...r, originalAmount: r.amount, originalCurrency: 'ILS', fxRate: 3.35, amount: Math.round(r.amount / 3.35 * 100) / 100 }));
     await importRows(store, converted, { source: `Isracard ${m}`, card: 'Isracard' });
   }
+  // A trip to Thailand in August: baht purchases, then the trip itself
+  const TH = [
+    ['GRAB* RIDE BANGKOK', 60, 180, 'Travel & Transport'], ['7-ELEVEN 12045 SUKHUMVIT', 45, 210, 'Groceries'], ['SOMTUM DER SILOM', 320, 640, 'Dining & Restaurants'],
+    ['AGODA HOTEL BKK', 1800, 3200, 'Travel & Transport'], ['BIG C SUPERCENTER', 400, 900, 'Groceries'], ['THAI SMILE CAFE', 90, 240, 'Dining & Restaurants'],
+    ['JIM THOMPSON STORE', 900, 2400, 'Shopping'], ['BTS SKYTRAIN', 44, 120, 'Travel & Transport'], ['ANGTHONG SEA TOUR', 1500, 2500, 'Entertainment'],
+  ];
+  const thRows = [];
+  for (const [name, min, max, category] of TH) for (let i = 0; i < 2; i++) thRows.push({ date: day('2026-08', 3 + Math.floor(rand() * 11)), merchant: name, amount: between(min, max), category });
+  await importRows(store, thRows.map(r => ({ date: r.date, merchant: r.merchant, originalAmount: r.amount, originalCurrency: 'THB', fxRate: 33.2, amount: Math.round(r.amount / 33.2 * 100) / 100 })), { source: 'Chase 2026-08', card: 'Chase Sapphire' });
+  store.update('transactions', list => { for (const t of list) { const spec = TH.find(x => x[0] === t.rawSource); if (spec && !t.category) { t.category = spec[3]; t.categorySource = 'auto'; } } });
+  require('../src/server/trips').createTrip(store, { name: 'Thailand', start: '2026-08-03', end: '2026-08-14' });
+
   // A couple of bank-synced rows, one pending, and something unrecognizable
   store.update('transactions', list => {
     list.push(

@@ -13,6 +13,7 @@ function showSettingsTab(tab) {
 async function renderSettings() {
   showSettingsTab(state.settingsTab || 'general');
   renderPlaidSettings();
+  renderAccountSettings();
   let data;
   try { data = await api('GET', '/api/settings'); } catch { return; }
   applySettings(data);
@@ -257,7 +258,7 @@ async function renderAbout() {
         <div><span class="about-label">Version</span><span>${a.version}</span></div>
         <div><span class="about-label">Transactions</span><span>${a.transactions.toLocaleString()}</span></div>
         <div><span class="about-label">Backups</span><span>${a.backups} daily copies</span></div>
-        <div><span class="about-label">Data folder</span><span class="about-path">${a.dataDir}</span></div>
+        ${a.hosted ? html`<div><span class="about-label">Storage</span><span>Your own folder on the Prism server, encrypted keys</span></div>` : html`<div><span class="about-label">Data folder</span><span class="about-path">${a.dataDir}</span></div>`}
       </div>
       ${a.canOpen ? html`<button class="btn btn-secondary btn-sm" style="margin-top:.75rem" onclick="api('POST','/api/about/open-data-folder')">Open data folder</button>` : ''}`;
   } catch { el.textContent = ''; }
@@ -498,3 +499,24 @@ async function applyReview() {
   } catch (err) { showToast('Failed: ' + err.message, 'error'); }
 }
 document.getElementById('review-modal-overlay')?.addEventListener('click', e => { if (e.target === e.currentTarget) closeReviewModal(); });
+
+// Hosted version: the account card (General tab)
+function renderAccountSettings() {
+  const card = document.getElementById('account-card');
+  if (!card) return;
+  card.style.display = state.hosted ? '' : 'none';
+  if (!state.hosted) return;
+  const u = state.user;
+  document.getElementById('account-summary').innerHTML = u ? html`<span class="key-status set">${u.email}</span>` : '';
+}
+async function changePassword() {
+  const current = document.getElementById('pw-current').value;
+  const next = document.getElementById('pw-next').value;
+  if (!current || !next) { showToast('Fill in both passwords', 'error'); return; }
+  try {
+    await api('POST', '/api/auth/password', { current, next });
+    document.getElementById('pw-current').value = '';
+    document.getElementById('pw-next').value = '';
+    showToast('Password changed', 'success');
+  } catch (err) { showToast(err.message, 'error'); }
+}

@@ -1215,3 +1215,10 @@ input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px;
   .page-header { margin: -1.25rem -1rem 1rem; padding: 1rem 1rem .6rem; }
   .filter-popover { width: min(420px, calc(100vw - 100px)); }
 }
+
+/* Hosted version: account in the sidebar */
+.sidebar-account { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .25rem .45rem; font-size: .76rem; color: var(--sidebar-muted); }
+.sidebar-account:empty { display: none; }
+.sidebar-user { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--sidebar-text); font-weight: 500; }
+.sidebar-signout { color: var(--sidebar-muted); font-size: .72rem; }
+.sidebar-signout:hover { color: #fff; }

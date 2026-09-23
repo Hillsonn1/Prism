@@ -13,9 +13,12 @@ function tripStats(trip) {
   const byCat = {};
   for (const t of counted) { if (t.amount <= 0) continue; const c = t.category || 'Uncategorized'; byCat[c] = (byCat[c] || 0) + t.amount; }
   const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
-  const ils = counted.filter(t => t.originalCurrency === 'ILS').reduce((s, t) => s + (t.originalAmount || 0), 0);
+  // What was actually paid in each foreign currency
+  const originals = {};
+  for (const t of counted) if (t.originalCurrency && t.originalCurrency !== 'USD') originals[t.originalCurrency] = (originals[t.originalCurrency] || 0) + (t.originalAmount || 0);
+  const ils = originals.ILS || 0;
   const days = tripDays(trip);
-  return { txns, counted, total, cats, ils, days, perDay: total / Math.max(days, 1) };
+  return { txns, counted, total, cats, ils, originals, days, perDay: total / Math.max(days, 1) };
 }
 const tripRange = trip => `${fmtDate(trip.start, { year: 'auto' })} – ${fmtDate(trip.end, { year: 'auto' })}`;
 
@@ -52,7 +55,7 @@ async function renderTrips() {
           <div><div class="trip-name">${trip.name}</div><div class="trip-dates muted">${tripRange(trip)} · ${plural(s.days, 'day')}</div></div>
           <div class="trip-total">${fmt(s.total)}</div>
         </div>
-        <div class="trip-card-meta muted">${fmt(s.perDay)} a day · ${plural(s.counted.length, 'purchase')}${s.ils ? html` · ${ils.format(Math.round(s.ils))}` : ''}</div>
+        <div class="trip-card-meta muted">${fmt(s.perDay)} a day · ${plural(s.counted.length, 'purchase')}${Object.entries(s.originals).sort((a, b) => b[1] - a[1]).slice(0, 1).map(([cur, amt]) => html` · ${currencyFormat(cur).format(Math.round(amt))}`)}</div>
         <div class="trip-cats">${s.cats.slice(0, 4).map(([c, amt]) => html`
           <div class="trip-cat-row"><span class="trip-cat-name" style="color:${categoryColor(c)}">${icon(categoryIcon(c))} ${c}</span><span class="chart-bar-wrap"><span class="chart-bar" style="width:${(amt / max * 100).toFixed(1)}%;background:${categoryColor(c)}"></span></span><span class="trip-cat-amt">${fmt(amt)}</span></div>`)}</div>
       </div>`;
@@ -105,7 +108,7 @@ function renderTripDetail(el, trip) {
       <div class="stat-tile"><div class="stat-label">Spent</div><div class="stat-value">${fmt(s.total)}</div><div class="stat-sub">${plural(s.counted.length, 'purchase')}${s.txns.length !== s.counted.length ? ` · ${s.txns.length - s.counted.length} left out` : ''}</div></div>
       <div class="stat-tile"><div class="stat-label">Per day</div><div class="stat-value">${fmt(s.perDay)}</div><div class="stat-sub">over ${plural(s.days, 'day')}</div></div>
       ${s.cats[0] ? html`<div class="stat-tile stat-clickable" onclick="drillTripCategory('${escAttr(trip.tag)}','${escAttr(s.cats[0][0])}')"><div class="stat-label">Biggest category</div><div class="stat-value stat-value-sm" style="color:${categoryColor(s.cats[0][0])}">${s.cats[0][0]}</div><div class="stat-sub">${fmt(s.cats[0][1])} · ${Math.round(s.cats[0][1] / Math.max(s.total, 1) * 100)}%</div></div>` : ''}
-      ${s.ils ? html`<div class="stat-tile"><div class="stat-label">In shekels</div><div class="stat-value">${ils.format(Math.round(s.ils))}</div><div class="stat-sub">converted at each day's rate</div></div>` : ''}
+      ${Object.entries(s.originals).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([cur, amt]) => html`<div class="stat-tile"><div class="stat-label">Paid in ${cur}</div><div class="stat-value">${currencyFormat(cur).format(Math.round(amt))}</div><div class="stat-sub">converted at each day's rate</div></div>`)}
     </div>
     ${s.cats.length ? html`<div class="card"><h2 class="card-title">Where it went</h2>${s.cats.map(([c, amt]) => html`
       <div class="chart-row chart-clickable" onclick="drillTripCategory('${escAttr(trip.tag)}','${escAttr(c)}')">

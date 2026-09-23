@@ -64,8 +64,8 @@ function cleanInfo(r, categoryNames) {
   };
 }
 
-function createMerchantIntel({ store, claude, log = console }) {
-  let running = null;
+function createMerchantIntel({ store, claude, log = console, state = null }) {
+  const lock = state || {}; // per-user in the hosted version
 
   // Merchants we haven't looked at yet, busiest first
   function candidates(limit) {
@@ -134,8 +134,8 @@ function createMerchantIntel({ store, claude, log = console }) {
 
   // Learn up to `limit` new merchants. One run at a time; callers share it.
   function enrich({ limit = 40, onProgress = () => {} } = {}) {
-    if (running) return running;
-    running = (async () => {
+    if (lock.running) return lock.running;
+    lock.running = (async () => {
       const categoryNames = getCategories(store).filter(c => !c.hidden && !c.redirect && c.name !== 'Unknown').map(c => c.name);
       const todo = candidates(limit);
       const result = { merchants: todo.length, enriched: 0, lookedUp: 0, categorized: 0 };
@@ -171,8 +171,8 @@ function createMerchantIntel({ store, claude, log = console }) {
       }
       result.categorized = applyCategories(results);
       return result;
-    })().finally(() => { running = null; });
-    return running;
+    })().finally(() => { lock.running = null; });
+    return lock.running;
   }
 
   // Kicks off a run without waiting for it; nothing happens without a key

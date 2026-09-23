@@ -16,6 +16,8 @@ const { createAssistant } = require('./assistant');
 const { createMerchantIntel } = require('./merchantInfo');
 const { createHygiene } = require('./hygiene');
 const { createVision } = require('./vision');
+const { als, contextualStore, contextualObject, createRegistry } = require('./tenancy');
+const { createUsers } = require('./users');
 
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
 const { version } = require('../../package.json');
@@ -34,19 +36,38 @@ function migrate(store) {
   }
 }
 
-function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null, safeStorage = null, log = console }) {
+// hosted: accounts and a data folder per user (the website); otherwise the
+// single local store the desktop app and `npm start` use.
+function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null, safeStorage = null, log = console,
+  hosted = process.env.PRISM_HOSTED === '1', secret = process.env.PRISM_SECRET || null, secureCookies = process.env.PRISM_SECURE_COOKIES === '1' || process.env.NODE_ENV === 'production' }) {
   fs.mkdirSync(dataDir, { recursive: true });
   fs.mkdirSync(uploadsDir, { recursive: true });
-  const store = new Store(dataDir);
-  migrate(store);
-  inferCategorySources(store);
-  const secrets = createSecrets(safeStorage);
-  secrets.migrate(store);
+  const secrets = createSecrets(safeStorage, { softwareKey: hosted ? secret : null });
+  const prepare = s => { migrate(s); inferCategorySources(s); secrets.migrate(s); };
+
+  let store, plaidState, intelState, users = null, registry = null;
+  if (hosted) {
+    users = createUsers({ dataDir, secret });
+    registry = createRegistry({ dataDir, prepare });
+    store = contextualStore(null);
+    plaidState = contextualObject('plaidState', {});
+    intelState = contextualObject('intelState', {});
+  } else {
+    store = new Store(dataDir);
+    prepare(store);
+    plaidState = null;
+    intelState = null;
+  }
 
   const apiKey = () => secrets.open(store.read('settings').anthropicApiKey) || null;
   const claude = createClaude({ store, apiKey, log });
-  const intel = createMerchantIntel({ store, claude, log });
-  const plaid = createPlaid({ store, openExternal, log, secrets, onChange: () => intel.inBackground() });
+  const intel = createMerchantIntel({ store, claude, log, state: intelState });
+  const forEachUser = hosted ? async fn => {
+    let list = [];
+    try { list = JSON.parse(fs.readFileSync(path.join(dataDir, 'users.json'), 'utf8')).users || []; } catch {}
+    for (const u of list) await registry.runAs(u.id, fn);
+  } : null;
+  const plaid = createPlaid({ store, openExternal: hosted ? null : openExternal, log, secrets, onChange: () => intel.inBackground(), state: plaidState, forEachUser });
   const fx = createFx({ store, log });
   const assistant = createAssistant({ store, claude, plaid, log });
   const hygiene = createHygiene({ store, claude, log });
@@ -54,12 +75,27 @@ function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null
 
   const app = express();
   app.disable('x-powered-by');
+  if (hosted) app.set('trust proxy', 1);
   app.use(express.json({ limit: '2mb' }));
+
+  if (hosted) {
+    // Who is asking, and whose data to use for the rest of the request
+    app.use((req, res, next) => {
+      req.user = users.verifySession(users.readCookie(req));
+      if (!req.user) return next();
+      als.run(registry.context(req.user.id), () => next());
+    });
+    app.use('/api', require('./routes/auth')({ users, secure: secureCookies }));
+    // The app itself needs a session; assets and the sign-in page do not
+    app.get(['/', '/index.html'], (req, res, next) => (req.user ? next() : res.redirect('/login')));
+    app.get('/login', (req, res) => (req.user ? res.redirect('/') : res.sendFile(path.join(PUBLIC_DIR, 'login.html'))));
+    app.use('/api', (req, res, next) => (req.user ? next() : res.status(401).json({ error: 'Sign in to continue', signedOut: true })));
+  }
   app.use(express.static(PUBLIC_DIR));
   app.use('/api', require('./routes/transactions')({ store, plaid, fx }));
   app.use('/api', require('./routes/import')({ store, uploadsDir, apiKey, fx, vision, claude, intel }));
   app.use('/api', require('./routes/budget')({ store, apiKey }));
-  app.use('/api', require('./routes/settings')({ store, version, apiKey, fx, dataDir, openFolder, secrets }));
+  app.use('/api', require('./routes/settings')({ store, version, apiKey, fx, dataDir: hosted ? null : dataDir, openFolder: hosted ? null : openFolder, secrets, hosted }));
   app.use('/api', require('./routes/categories')({ store }));
   app.use('/api', require('./routes/trips')({ store }));
   app.use('/api', require('./routes/ai')({ store, claude, assistant, intel, hygiene, fx }));
@@ -72,14 +108,14 @@ function createApp({ dataDir, uploadsDir, openExternal = null, openFolder = null
     res.status(err.status || 500).json({ error: err.status ? err.message : 'Something went wrong' });
   });
 
-  return { app, store, plaid, fx };
+  return { app, store, plaid, fx, users, registry, hosted };
 }
 
 // Listens on localhost only: this is personal financial data, and the app is
 // the only client. port 0 lets the OS pick a free port (the desktop app does
 // this so it can never collide with something else on the machine).
-async function start({ port = 0, host = '127.0.0.1', ...options }) {
-  const { app, store, plaid, fx } = createApp(options);
+async function start({ port = 0, host = process.env.PRISM_HOSTED === '1' ? '0.0.0.0' : '127.0.0.1', ...options }) {
+  const { app, store, plaid, fx, users, registry, hosted } = createApp(options);
   const server = await new Promise((resolve, reject) => {
     const s = app.listen(port, host, () => resolve(s));
     s.on('error', reject);
@@ -87,7 +123,7 @@ async function start({ port = 0, host = '127.0.0.1', ...options }) {
   plaid.startScheduler();
   const actualPort = server.address().port;
   return {
-    app, store, plaid, fx, server,
+    app, store, plaid, fx, users, registry, hosted, server,
     port: actualPort,
     url: `http://${host}:${actualPort}`,
     close: () => new Promise(resolve => { plaid.stop(); server.close(resolve); }),

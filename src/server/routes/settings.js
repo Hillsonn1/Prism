@@ -19,7 +19,7 @@ function semverGt(a, b) {
   return false;
 }
 
-module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, openFolder = null, secrets }) {
+module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, openFolder = null, secrets, hosted = false }) {
   const router = express.Router();
 
   router.get('/version', (_req, res) => res.json({ version }));
@@ -27,6 +27,7 @@ module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, 
   router.get('/about', (_req, res) => {
     res.json({
       version,
+      hosted,
       dataDir,
       encrypted: secrets.available,
       transactions: store.read('transactions').length,
@@ -69,6 +70,7 @@ module.exports = function settingsRoutes({ store, version, apiKey, fx, dataDir, 
       currency: { ilsRate: s.currency?.ilsRate || 'auto', latest: fx.latestCached() },
       categories: getCategories(store),
       trips: s.trips || [],
+      hosted,
     });
   });
 

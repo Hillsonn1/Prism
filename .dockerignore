@@ -1,0 +1,11 @@
+node_modules
+dist
+data
+uploads
+site
+build
+tests
+.git
+.github
+.claude
+*.md
