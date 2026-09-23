@@ -9,7 +9,7 @@ if (navigator.platform.startsWith('Mac')) document.documentElement.dataset.platf
     await loadAll();
   } catch (err) {
     const el = document.getElementById('dashboard-empty');
-    if (el) el.innerHTML = html`<p class="load-error">Failed to load data — is the server running?<br><small>${err.message}</small></p>`;
+    if (el) { el.innerHTML = html`<p class="load-error">Failed to load data — is the server running?<br><small>${err.message}</small></p>`; el.style.display = ''; }
   }
   renderDashboard();
   checkForUpdate();

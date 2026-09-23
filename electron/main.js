@@ -1,5 +1,6 @@
 'use strict';
-const { app, BrowserWindow, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, shell, safeStorage, nativeTheme } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const { start, logCrashes } = require('../src/server');
 
@@ -43,7 +44,6 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 // Window size and position survive relaunches
-const fs = require('fs');
 const boundsFile = () => path.join(app.getPath('userData'), 'window.json');
 function savedBounds() {
   try {
@@ -60,6 +60,14 @@ function rememberBounds(win) {
   win.on('move', save);
 }
 
+// The page background before the app paints, so dark mode doesn't flash white
+function startupBackground() {
+  let theme = 'system';
+  try { theme = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'settings.json'), 'utf8')).prefs?.theme || 'system'; } catch {}
+  const dark = theme === 'dark' || (theme !== 'light' && nativeTheme.shouldUseDarkColors);
+  return dark ? '#0f0f11' : '#f5f5f7';
+}
+
 function createWindow(url) {
   const bounds = savedBounds();
   mainWindow = new BrowserWindow({
@@ -73,13 +81,15 @@ function createWindow(url) {
     autoHideMenuBar: true,
     // macOS: traffic lights sit over the sidebar instead of a separate title bar
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 16 } } : {}),
-    backgroundColor: '#f8fafc',
+    backgroundColor: startupBackground(),
+    show: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
     },
   });
   rememberBounds(mainWindow);
+  mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.loadURL(url);
   // Links that open a new window (Plaid, download page) go to the system browser
   mainWindow.webContents.setWindowOpenHandler(({ url: target }) => {

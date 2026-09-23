@@ -416,10 +416,11 @@ function createPlaid({ store, openExternal = null, log = console, request = http
 
   const router = express.Router();
 
-  router.get('/status', (_req, res) => {
+  // Everything the UI shows about bank sync (also folded into /api/dashboard)
+  function status() {
     const settings = store.read('settings');
     const cfg = getConfig(store);
-    res.json({
+    return {
       configured: Boolean(cfg),
       env: cfg ? cfg.env : (settings.plaid?.env || 'sandbox'),
       clientId: settings.plaid?.clientId || '',
@@ -430,8 +431,10 @@ function createPlaid({ store, openExternal = null, log = console, request = http
       changeCounter: state.changeCounter,
       syncIntervalMinutes: SYNC_INTERVAL_MS / 60000,
       items: itemsForCurrentEnv().data.items.map(publicItem),
-    });
-  });
+    };
+  }
+
+  router.get('/status', (_req, res) => res.json(status()));
 
   router.post('/settings', async (req, res) => {
     const clientId = String(req.body.clientId || '').trim();
@@ -572,7 +575,7 @@ function createPlaid({ store, openExternal = null, log = console, request = http
     });
   }
 
-  return { router, syncItems, startScheduler, stop, state, renameCard, renameSource };
+  return { router, syncItems, startScheduler, stop, state, status, renameCard, renameSource };
 }
 
 module.exports = { createPlaid, getConfig, isSpend, merchantLabel, txnDate, txnAmount, SYNC_INTERVAL_MS };

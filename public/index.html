@@ -5,22 +5,46 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Prism</title>
   <link rel="icon" type="image/x-icon" href="/icon.ico" />
+  <script>
+    // Theme before first paint: last saved preference, else the system setting
+    (function () {
+      var saved = null;
+      try { saved = localStorage.getItem('prism-theme'); } catch (e) {}
+      var dark = saved === 'dark' || (saved !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    })();
+  </script>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="layout">
     <aside class="sidebar">
       <div class="sidebar-brand">
-        <img src="/prism-logo.png" class="brand-logo-full" alt="Prism" />
+        <a class="brand" href="#" onclick="switchView('dashboard',{clearHistory:true});return false" aria-label="Prism home">
+          <svg class="brand-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <defs>
+              <linearGradient id="brand-grad" x1="4" y1="4" x2="22" y2="26" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#5ac8fa"/>
+                <stop offset=".55" stop-color="#0a84ff"/>
+                <stop offset="1" stop-color="#5e5ce6"/>
+              </linearGradient>
+            </defs>
+            <path d="M11.7 5.1a1.5 1.5 0 0 1 2.6 0l9.4 16.7a1.5 1.5 0 0 1-1.3 2.2H3.6a1.5 1.5 0 0 1-1.3-2.2Z" fill="url(#brand-grad)"/>
+            <path d="M18.6 12.2 30 8.4" stroke="#ff375f" stroke-width="2" stroke-linecap="round"/>
+            <path d="M20.4 15.3H30" stroke="#ffcc00" stroke-width="2" stroke-linecap="round"/>
+            <path d="M22.2 18.4 30 22.2" stroke="#34c759" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span class="brand-name">Prism</span>
+        </a>
       </div>
-      <button id="back-btn" class="back-btn" style="display:none" onclick="goBack()"><span data-icon="arrow-left"></span> Back</button>
+      <button id="back-btn" class="back-btn" style="display:none" onclick="goBack()"><span data-icon="arrow-left"></span><span>Back</span></button>
       <nav class="sidebar-nav">
-        <a class="nav-link active" data-view="dashboard" href="#"><span class="nav-icon" data-icon="dashboard"></span> Dashboard</a>
-        <a class="nav-link" data-view="transactions" href="#"><span class="nav-icon" data-icon="list"></span> Transactions</a>
-        <a class="nav-link" data-view="budget" href="#"><span class="nav-icon" data-icon="wallet"></span> Budget</a>
-        <a class="nav-link" data-view="upload" href="#"><span class="nav-icon" data-icon="download"></span> Import</a>
-        <a class="nav-link" data-view="merchants" href="#"><span class="nav-icon" data-icon="store"></span> Merchants</a>
-        <a class="nav-link" data-view="settings" href="#"><span class="nav-icon" data-icon="sliders"></span> Settings</a>
+        <a class="nav-link active" data-view="dashboard" href="#"><span class="nav-icon" data-icon="dashboard"></span><span>Dashboard</span></a>
+        <a class="nav-link" data-view="transactions" href="#"><span class="nav-icon" data-icon="list"></span><span>Transactions</span></a>
+        <a class="nav-link" data-view="budget" href="#"><span class="nav-icon" data-icon="wallet"></span><span>Budget</span></a>
+        <a class="nav-link" data-view="upload" href="#"><span class="nav-icon" data-icon="download"></span><span>Import</span></a>
+        <a class="nav-link" data-view="merchants" href="#"><span class="nav-icon" data-icon="store"></span><span>Merchants</span></a>
+        <a class="nav-link" data-view="settings" href="#"><span class="nav-icon" data-icon="sliders"></span><span>Settings</span></a>
       </nav>
       <div class="sidebar-footer"><div id="sidebar-footer"></div><div class="sidebar-version" id="sidebar-version"></div></div>
     </aside>
@@ -38,7 +62,7 @@
           <div class="header-actions" id="dashboard-filter-bar"></div>
         </div>
         <div id="dashboard-content">
-          <div class="empty-state" id="dashboard-empty">
+          <div class="empty-state" id="dashboard-empty" style="display:none">
             <h2>No transactions yet</h2>
             <p>Import a statement or connect your bank to get started.</p>
             <div class="empty-actions">
@@ -388,7 +412,7 @@
           </div>
         </div>
 
-        <p style="position:fixed;bottom:8px;right:14px;font-size:.7rem;color:#94a3b8;pointer-events:none;user-select:none;z-index:0;font-style:italic">Thanks TLC!</p>
+        <p class="budget-thanks">Thanks TLC!</p>
 
         <div class="card" id="bud-overview-card">
           <div id="bud-overview-content"></div>

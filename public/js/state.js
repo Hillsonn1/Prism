@@ -20,8 +20,9 @@ const state = {
   budgetInsight: {},
   trendShowAll: false,
   insightsCache: {},       // AI write-ups, per period
-  localInsightsCache: {},  // local observations, per period
-  anomaliesCache: {},
+  dashboardCache: {},      // anomalies + local insights + bank status, per period
+  _dashSeq: 0,             // guards against out-of-order dashboard fetches
+  _dashDrawnKey: null,     // period whose charts are currently painted
   dismissedAnomalies: new Set(),
   hasApiKey: false,
   prefs: {},
@@ -61,28 +62,29 @@ const CATEGORIES = [
 // What the user can pick; "Unknown" only ever comes from automatic categorization
 const SELECTABLE_CATEGORIES = CATEGORIES.filter(c => c !== 'Unknown');
 
+// Apple system palette — saturated enough to read on white, calm enough for dark
 const CATEGORY_COLORS = {
-  'Groceries': '#22c55e',
-  'Dining & Restaurants': '#f97316',
-  'Gas & Fuel': '#eab308',
-  'Shopping': '#8b5cf6',
-  'Entertainment': '#ec4899',
-  'Travel & Transport': '#06b6d4',
-  'Health & Medical': '#0891b2',
-  'Utilities & Bills': '#64748b',
-  'Subscriptions & Streaming': '#a855f7',
-  'Personal Care': '#14b8a6',
-  'Home & Garden': '#84cc16',
-  'Education': '#3b82f6',
-  'Gifts & Donations': '#f43f5e',
-  'Business Expenses': '#0ea5e9',
-  'Uncategorized': '#94a3b8',
-  'Other': '#6b7280',
-  'Unknown': '#f59e0b',
+  'Groceries': '#34c759',
+  'Dining & Restaurants': '#ff9500',
+  'Gas & Fuel': '#ffcc00',
+  'Shopping': '#af52de',
+  'Entertainment': '#ff2d55',
+  'Travel & Transport': '#32ade6',
+  'Health & Medical': '#00c7be',
+  'Utilities & Bills': '#8e8e93',
+  'Subscriptions & Streaming': '#5e5ce6',
+  'Personal Care': '#30b0c7',
+  'Home & Garden': '#a2c33b',
+  'Education': '#007aff',
+  'Gifts & Donations': '#ff375f',
+  'Business Expenses': '#5ac8fa',
+  'Uncategorized': '#aeaeb2',
+  'Other': '#8e8e93',
+  'Unknown': '#ff9f0a',
 };
 
 function categoryColor(cat) {
-  return CATEGORY_COLORS[cat] || '#94a3b8';
+  return CATEGORY_COLORS[cat] || '#aeaeb2';
 }
 
 // <option> list for a category <select>

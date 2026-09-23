@@ -102,5 +102,7 @@ async function promptDialog({ title, message, label = '', value = '', placeholde
 function applyTheme(theme) {
   const dark = theme === 'dark' || (theme !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  // Remembered locally too, so the next launch paints the right theme before data loads
+  try { localStorage.setItem('prism-theme', theme === 'dark' || theme === 'light' ? theme : 'system'); } catch {}
 }
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme((typeof state !== 'undefined' && state.prefs.theme) || 'system'));

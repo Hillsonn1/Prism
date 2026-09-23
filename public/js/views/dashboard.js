@@ -30,6 +30,10 @@ function renderDashboard() {
       <option value="" ${!month ? 'selected' : ''}>All time</option>
     </select>`;
 
+  // Charts sweep in when the period changes; every other re-render paints in place
+  const animate = state._dashDrawnKey !== (month || 'all');
+  state._dashDrawnKey = month || 'all';
+
   const txns = month ? state.transactions.filter(t => t.date?.startsWith(month)) : state.transactions;
   const total = spendOf(txns);
   const thisMonth = new Date().toISOString().slice(0, 7);
@@ -88,7 +92,7 @@ function renderDashboard() {
   // ---- Category breakdown ----
   document.getElementById('category-note').textContent = month ? fmtMonth(month) : 'All time';
   const max = sorted[0]?.[1] || 1;
-  document.getElementById('pie-chart').innerHTML = donutChart({ slices: sorted, total, onSliceClick: 'drillCategory' });
+  document.getElementById('pie-chart').innerHTML = donutChart({ slices: sorted, total, onSliceClick: 'drillCategory', animate });
   document.getElementById('category-chart').innerHTML = html`${sorted.map(([cat, amt]) => {
     const budget = state.budgets[cat];
     const showBudget = month && budget;
@@ -103,7 +107,7 @@ function renderDashboard() {
     return html`
       <div class="chart-row chart-clickable" onclick="drillCategory('${escAttr(cat)}')" title="See ${cat} transactions">
         <div class="chart-label">${cat}</div>
-        <div class="chart-bar-wrap"><div class="chart-bar" style="width:0;background:${barColor}" data-w="${(amt / max * 100).toFixed(1)}%"></div></div>
+        <div class="chart-bar-wrap"><div class="chart-bar" style="width:${animate ? 0 : (amt / max * 100).toFixed(1) + '%'};background:${barColor}" data-w="${(amt / max * 100).toFixed(1)}%"></div></div>
         <div class="chart-amount">${fmt(amt)}${extra}</div>
       </div>`;
   })}`;
@@ -127,7 +131,7 @@ function renderDashboard() {
     return html`
       <div class="chart-row chart-clickable ${isSelected ? 'chart-row-selected' : ''}" onclick="state.dashboardMonth='${m}';renderDashboard()" title="${fmtMonth(m)}">
         <div class="chart-label">${fmtMonth(m, 'short')}</div>
-        <div class="chart-bar-wrap"><div class="chart-bar ${isSelected ? 'chart-bar-selected' : 'chart-bar-muted'}" style="width:0" data-w="${(monthTotals[m] / trendMax * 100).toFixed(1)}%"></div></div>
+        <div class="chart-bar-wrap"><div class="chart-bar ${isSelected ? 'chart-bar-selected' : 'chart-bar-muted'}" style="width:${animate ? 0 : (monthTotals[m] / trendMax * 100).toFixed(1) + '%'}" data-w="${(monthTotals[m] / trendMax * 100).toFixed(1)}%"></div></div>
         <div class="chart-amount">${fmt(monthTotals[m])}</div>
       </div>`;
   })}`;
@@ -144,36 +148,39 @@ function renderDashboard() {
 
   renderTopMerchants(txns);
   renderRecurring();
-  renderAnomalies();
-  renderInsights();
-  renderCardsDue();
+  renderAsyncWidgets();
 
-  requestAnimationFrame(() => {
+  if (animate) requestAnimationFrame(() => {
     document.querySelectorAll('.chart-bar[data-w]').forEach(b => { b.style.width = b.dataset.w; });
   });
 }
 
-// ---- Anomalies ----
-async function renderAnomalies() {
-  const card = document.getElementById('anomalies-card');
-  const list = document.getElementById('anomalies-list');
-  if (!card || !list) return;
+// Anomalies, insights and card due dates come from one request and paint together
+async function renderAsyncWidgets() {
   const cacheKey = state.dashboardMonth || 'all';
-  if (state.anomaliesCache[cacheKey] === undefined) {
-    try {
-      const params = state.dashboardMonth ? `?month=${state.dashboardMonth}` : '';
-      const data = await api('GET', `/api/anomalies${params}`);
-      state.anomaliesCache[cacheKey] = data.anomalies || [];
-    } catch { state.anomaliesCache[cacheKey] = []; }
+  if (!state.dashboardCache[cacheKey]) {
+    const params = state.dashboardMonth ? `?month=${state.dashboardMonth}` : '';
+    const seq = ++state._dashSeq;
+    let data;
+    try { data = await api('GET', `/api/dashboard${params}`); }
+    catch { data = { anomalies: [], insights: [], plaid: null }; }
+    if (seq !== state._dashSeq) return; // a newer render took over
+    state.dashboardCache[cacheKey] = data;
   }
-  displayAnomalies(state.anomaliesCache[cacheKey]);
+  if ((state.dashboardMonth || 'all') !== cacheKey) return;
+  const d = state.dashboardCache[cacheKey];
+  displayAnomalies(d.anomalies || []);
+  renderInsights(d.insights || []);
+  renderCardsDue(d.plaid);
 }
 
+// ---- Anomalies ----
 function anomalyKey(a) { return `${a.label}||${a.detail}`; }
 
 function displayAnomalies(anomalies) {
   const card = document.getElementById('anomalies-card');
   const list = document.getElementById('anomalies-list');
+  if (!card || !list) return;
   const visible = anomalies.filter(a => !state.dismissedAnomalies.has(anomalyKey(a)));
   if (!visible.length) { card.style.display = 'none'; return; }
   card.style.display = '';
@@ -198,18 +205,12 @@ function dismissAnomaly(i, key) {
 }
 
 // ---- Insights: local observations, plus an optional AI write-up ----
-async function renderInsights() {
+function renderInsights(insights) {
   const list = document.getElementById('insights-list');
   if (!list) return;
   const cacheKey = state.dashboardMonth || 'all';
-  if (!state.localInsightsCache[cacheKey]) {
-    try {
-      const params = state.dashboardMonth ? `?month=${state.dashboardMonth}` : '';
-      state.localInsightsCache[cacheKey] = (await api('GET', `/api/insights/local${params}`)).insights || [];
-    } catch { state.localInsightsCache[cacheKey] = []; }
-  }
   // The tiles already show totals, pace, the top category and what's uncategorized
-  const items = state.localInsightsCache[cacheKey].filter(i => !['total', 'pace', 'top-category', 'uncategorized'].includes(i.kind)).slice(0, 4);
+  const items = insights.filter(i => !['total', 'pace', 'top-category', 'uncategorized'].includes(i.kind)).slice(0, 4);
   const actions = {
     'top-category': i => `drillCategory('${escAttr(i.category)}')`,
     'swing': i => `drillCategory('${escAttr(i.category)}')`,
@@ -258,14 +259,12 @@ async function generateInsights(force = false) {
 }
 
 function clearDashboardCaches() {
-  state.anomaliesCache = {};
-  state.localInsightsCache = {};
+  state.dashboardCache = {};
 }
 
 function clearAllCaches() {
   state.insightsCache = {};
-  state.anomaliesCache = {};
-  state.localInsightsCache = {};
+  state.dashboardCache = {};
   state.budgetInsight = {};
 }
 
@@ -366,12 +365,11 @@ function dueStatus(l) {
   return { kind: days <= 7 ? 'soon' : 'ok', text: `Due in ${plural(days, 'day')}`, days };
 }
 
-async function renderCardsDue() {
+function renderCardsDue(status) {
   const card = document.getElementById('cards-due-card');
   const list = document.getElementById('cards-due-list');
   if (!card || !list) return;
-  let status;
-  try { status = await api('GET', '/api/plaid/status'); } catch { card.style.display = 'none'; return; }
+  if (!status) { card.style.display = 'none'; renderNextPaymentTile(null); return; }
   const cards = [];
   for (const item of status.items) {
     if (item.env && item.env !== status.env) continue;

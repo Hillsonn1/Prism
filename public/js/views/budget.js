@@ -181,7 +181,7 @@ function renderBudgetOverview({ skipAI = false } = {}) {
       </div>`;
   } else if (monthlyBudget > 0) {
     const pct = totalSpent / monthlyBudget;
-    const barColor = pct > 1 ? '#dc2626' : pct > 0.85 ? '#f97316' : '#22c55e';
+    const barColor = pct > 1 ? 'var(--danger)' : pct > 0.85 ? 'var(--warning)' : 'var(--success)';
     const expectedPct = (dayOfMonth / daysInMonth * 100).toFixed(1);
     const remaining = monthlyBudget - totalSpent;
     const pace = isCurrentMonth && dayOfMonth > 0 ? totalSpent / dayOfMonth * daysInMonth : null;
@@ -317,11 +317,15 @@ function renderBudgetBreakdown() {
   }
   if (card) card.style.display = '';
 
+  // Sweep the chart in when the month changes; otherwise repaint in place
+  const animate = state._budgetDrawnKey !== month;
+  state._budgetDrawnKey = month;
+
   const catRowsHtml = sortedCats.map(([cat, catSpent]) => {
     const catBudget = state.budgets[cat] || 0;
     const overCat = catBudget > 0 && catSpent > catBudget;
     const barW = (catSpent / ccSpent * 100).toFixed(1);
-    const barColor = overCat ? '#dc2626' : categoryColor(cat);
+    const barColor = overCat ? 'var(--danger)' : categoryColor(cat);
     const pctLabel = (catSpent / ccSpent * 100).toFixed(0) + '%';
     return `<div class="budget-cat-row" onclick="jumpToBudgetCategory('${escAttr(cat)}')" title="View ${esc(cat)} transactions">
       <div class="budget-cat-row-label">
@@ -330,7 +334,7 @@ function renderBudgetBreakdown() {
         ${overCat ? `<span class="budget-cat-over-badge">+${fmt(catSpent - catBudget)}</span>` : ''}
       </div>
       <div class="budget-cat-row-bar-wrap">
-        <div class="budget-cat-row-bar" style="width:0;background:${barColor};opacity:.85" data-w="${barW}%"></div>
+        <div class="budget-cat-row-bar" style="width:${animate ? 0 : barW + '%'};background:${barColor};opacity:.85" data-w="${barW}%"></div>
       </div>
       <div class="budget-cat-row-amt">
         <span class="budget-cat-row-spent">${fmt(catSpent)}</span>
@@ -354,7 +358,7 @@ function renderBudgetBreakdown() {
   el.innerHTML = `
     <h2 class="card-title" style="margin-bottom:1.25rem">Spending Breakdown</h2>
     <div class="bud-breakdown-layout">
-      <div class="bud-pie-wrap">${donutChart({ slices: sortedCats, total: ccSpent, size: 240, thickness: 41, centerLabel: 'CC Spending' })}</div>
+      <div class="bud-pie-wrap">${donutChart({ slices: sortedCats, total: ccSpent, size: 240, thickness: 41, centerLabel: 'Spending', animate })}</div>
       <div class="bud-cat-list">${catRowsHtml}</div>
     </div>
     <details class="bud-limits-details">
@@ -369,12 +373,10 @@ function renderBudgetBreakdown() {
     </details>
   `;
 
-  requestAnimationFrame(() => {
+  if (animate) requestAnimationFrame(() => {
     document.querySelectorAll('.budget-cat-row-bar[data-w]').forEach(b => { b.style.width = b.dataset.w; });
   });
 }
-
-// Pie chart — budget variant (240px, no drill-down click)
 
 async function saveMonthlyBudget() {
   const val = parseFloat(document.getElementById('budget-total-input')?.value);

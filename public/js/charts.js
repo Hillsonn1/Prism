@@ -1,7 +1,7 @@
 // Charts drawn as inline SVG.
 
-// Donut chart. slices: [[label, amount], ...]. Animates the sweep on first paint.
-function donutChart({ slices, total, size = 190, thickness = 32, centerLabel = 'Total', onSliceClick = null }) {
+// Donut chart. slices: [[label, amount], ...]. Sweeps in when `animate` is set, otherwise paints whole.
+function donutChart({ slices, total, size = 190, thickness = 32, centerLabel = 'Total', onSliceClick = null, animate = true }) {
   if (!slices.length || total === 0) return '';
   const cx = size / 2, cy = size / 2, R = size / 2 - 13, r = R - thickness;
   const style = `width:${size}px;height:${size}px;display:block;margin:0 auto`;
@@ -15,20 +15,35 @@ function donutChart({ slices, total, size = 190, thickness = 32, centerLabel = '
     const circ = +(2 * Math.PI * mid).toFixed(2);
     return html`<svg viewBox="0 0 ${size} ${size}" style="${style}">
       <circle cx="${cx}" cy="${cy}" r="${mid}" fill="none" stroke="${color}" stroke-width="${sw}" opacity=".9"
-        stroke-dasharray="${circ}" stroke-dashoffset="${circ}" transform="rotate(-90 ${cx} ${cy})">
-        <animate attributeName="stroke-dashoffset" from="${circ}" to="0" dur=".65s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".25,.1,.25,1"/>
+        stroke-dasharray="${circ}" stroke-dashoffset="${animate ? circ : 0}" transform="rotate(-90 ${cx} ${cy})">
+        ${animate ? raw(`<animate attributeName="stroke-dashoffset" from="${circ}" to="0" dur=".65s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".25,.1,.25,1"/>`) : ''}
       </circle>${center}</svg>`;
   }
 
+  // Ring segment path for one slice, given the sweep drawn so far
+  const arcPath = (start, drawn) => {
+    const end = start + drawn, large = drawn > Math.PI ? 1 : 0;
+    const x1 = cx + R * Math.cos(start), y1 = cy + R * Math.sin(start);
+    const x2 = cx + R * Math.cos(end), y2 = cy + R * Math.sin(end);
+    const x3 = cx + r * Math.cos(end), y3 = cy + r * Math.sin(end);
+    const x4 = cx + r * Math.cos(start), y4 = cy + r * Math.sin(start);
+    return `M${x1.toFixed(2)} ${y1.toFixed(2)} A${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L${x3.toFixed(2)} ${y3.toFixed(2)} A${r} ${r} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`;
+  };
+
   const id = `donut-${Math.random().toString(36).slice(2, 8)}`;
+  let angle = -Math.PI / 2;
   const paths = slices.map(([cat, amt], i) => {
     const pct = amt / total;
     const title = `${cat}: ${fmt(amt)} (${Math.round(pct * 100)}%)`;
-    return html`<path data-i="${i}" data-pct="${pct}" fill="${categoryColor(cat)}" opacity=".9"
+    const full = pct * 2 * Math.PI;
+    // Leave a hairline gap between slices; a full-sweep slice is drawn as a near-complete ring
+    const d = animate ? '' : arcPath(angle, Math.min(full, 2 * Math.PI - 0.0001));
+    angle += full;
+    return html`<path data-i="${i}" data-pct="${pct}" d="${d}" fill="${categoryColor(cat)}" opacity=".9"
       ${onSliceClick ? raw(`style="cursor:pointer" onclick="${onSliceClick}('${escAttr(cat)}')"`) : ''}><title>${title}</title></path>`;
   });
 
-  requestAnimationFrame(() => {
+  if (animate) requestAnimationFrame(() => {
     const svg = document.getElementById(id);
     if (!svg) return;
     const els = [...svg.querySelectorAll('path[data-pct]')];
@@ -42,12 +57,7 @@ function donutChart({ slices, total, size = 190, thickness = 32, centerLabel = '
         const drawn = Math.max(0, Math.min(full, progress - cum));
         cum += full;
         if (drawn < 0.0001) { p.setAttribute('d', ''); start += full; continue; }
-        const end = start + drawn, large = drawn > Math.PI ? 1 : 0;
-        const x1 = cx + R * Math.cos(start), y1 = cy + R * Math.sin(start);
-        const x2 = cx + R * Math.cos(end), y2 = cy + R * Math.sin(end);
-        const x3 = cx + r * Math.cos(end), y3 = cy + r * Math.sin(end);
-        const x4 = cx + r * Math.cos(start), y4 = cy + r * Math.sin(start);
-        p.setAttribute('d', `M${x1.toFixed(2)} ${y1.toFixed(2)} A${R} ${R} 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L${x3.toFixed(2)} ${y3.toFixed(2)} A${r} ${r} 0 ${large} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`);
+        p.setAttribute('d', arcPath(start, drawn));
         start += full;
       }
       if (rawT < 1) requestAnimationFrame(frame);

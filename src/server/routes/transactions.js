@@ -2,6 +2,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const { str, num, isoDate, bad, route } = require('../validate');
+const { anomalies, spendingInsights } = require('../insights');
 
 // Fields a client may set on a transaction; everything else is system-managed
 function transactionFields(body, { partial = false } = {}) {
@@ -95,6 +96,13 @@ module.exports = function transactionsRoutes({ store, plaid, fx }) {
       return [];
     });
     res.json({ success: true });
+  });
+
+  // One round trip for the dashboard's async widgets so the page paints whole
+  router.get('/dashboard', (req, res) => {
+    const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month) ? req.query.month : '';
+    const txns = store.read('transactions');
+    res.json({ anomalies: anomalies(txns, month), insights: spendingInsights(txns, month), plaid: plaid.status() });
   });
 
   router.get('/summary', (_req, res) => {
